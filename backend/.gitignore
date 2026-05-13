@@ -1,0 +1,8 @@
+# Backend data files
+data/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env

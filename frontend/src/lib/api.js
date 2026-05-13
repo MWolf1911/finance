@@ -1,0 +1,76 @@
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined'
+    ? `http://${window.location.hostname}:3001/api`
+    : 'http://localhost:3001/api');
+
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `API error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export const api = {
+  // Health / Lazy Generation trigger
+  health: () => apiFetch('/health'),
+
+  // Shared household profile
+  getHousehold: () => apiFetch('/household'),
+
+  // Transactions
+  getTransactions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/transactions?${q}`);
+  },
+  getMonthlySummary: (year, month) =>
+    apiFetch(`/transactions/summary?year=${year}&month=${month}`),
+  createTransaction: (data) => apiFetch('/transactions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateTransaction: (id, data) => apiFetch(`/transactions/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteTransaction: (id) => apiFetch(`/transactions/${id}`, { method: 'DELETE' }),
+
+  // Recurring Templates
+  getTemplates: () => apiFetch('/templates'),
+  createTemplate: (data) => apiFetch('/templates', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateTemplate: (id, data) => apiFetch(`/templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteTemplate: (id) => apiFetch(`/templates/${id}`, { method: 'DELETE' }),
+
+  // Debts
+  getDebts: () => apiFetch('/debts'),
+  getDebtTotal: () => apiFetch('/debts/total'),
+  getDebtProjection: (extraPayment = 0) =>
+    apiFetch(`/debts/projection?extraPayment=${extraPayment}`),
+  createDebt: (data) => apiFetch('/debts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateDebt: (id, data) => apiFetch(`/debts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteDebt: (id) => apiFetch(`/debts/${id}`, { method: 'DELETE' }),
+
+  // Archives
+  getArchives: () => apiFetch('/archives'),
+  getArchiveMonth: (year, month) => apiFetch(`/archives/${year}/${month}`),
+  getArchiveCsvUrl: (year, month) => `${API_BASE}/archives/${year}/${month}/csv`,
+};
