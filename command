@@ -1,0 +1,1 @@
+curl -fsSL https://raw.githubusercontent.com/MWolf1911/finance/main/install.sh | sudo bash -s -- --repo https://github.com/MWolf1911/finance.git --ref main
