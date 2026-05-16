@@ -9,7 +9,7 @@ import Modal from '@/components/Modal';
 
 export default function DebtsPage() {
   const { currentUser, loading: authLoading } = useAuth();
-  const { debts, isLoading, mutate } = useDebts();
+  const { debts, isLoading, mutate } = useDebts(true);
   const { total, mutate: mutateTotal } = useDebtTotal();
   const { month, year } = getCurrentMonth();
   const { mutate: mutateSummary } = useMonthlySummary(month, year);
@@ -20,8 +20,18 @@ export default function DebtsPage() {
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
 
+  const activeDebts = useMemo(
+    () => debts.filter((d) => !d.archived_at),
+    [debts]
+  );
+
+  const archivedDebts = useMemo(
+    () => debts.filter((d) => Boolean(d.archived_at)),
+    [debts]
+  );
+
   const sortedDebts = useMemo(() => {
-    return [...debts].sort((a, b) => {
+    return [...activeDebts].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case 'name': cmp = a.name.localeCompare(b.name); break;
@@ -32,7 +42,7 @@ export default function DebtsPage() {
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [debts, sortKey, sortDir]);
+  }, [activeDebts, sortKey, sortDir]);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
@@ -47,6 +57,17 @@ export default function DebtsPage() {
   async function handleDelete(id) {
     if (!confirm('Delete this debt account?')) return;
     await api.deleteDebt(id);
+    refreshAll();
+  }
+
+  async function handleArchive(id) {
+    if (!confirm('Archive this paid-off debt?')) return;
+    await api.archiveDebt(id);
+    refreshAll();
+  }
+
+  async function handleUnarchive(id) {
+    await api.unarchiveDebt(id);
     refreshAll();
   }
 
@@ -71,9 +92,11 @@ export default function DebtsPage() {
       {/* Debt cards */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading debts…</div>
-      ) : debts.length === 0 ? (
+      ) : activeDebts.length === 0 ? (
         <div className="text-center py-12 text-gray-400 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700">
-          No debts tracked yet. Add one above!
+          {archivedDebts.length > 0
+            ? 'No active debts right now.'
+            : 'No debts tracked yet. Add one above!'}
         </div>
       ) : (
         <>
@@ -108,10 +131,30 @@ export default function DebtsPage() {
                 debt={debt}
                 onEdit={() => setEditDebt(debt)}
                 onDelete={() => handleDelete(debt.id)}
+                onArchive={() => handleArchive(debt.id)}
               />
             ))}
           </div>
         </>
+      )}
+
+      {archivedDebts.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Archived Paid-Off Debts
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {archivedDebts.map((debt) => (
+              <DebtCard
+                key={debt.id}
+                debt={debt}
+                isArchived
+                onDelete={() => handleDelete(debt.id)}
+                onUnarchive={() => handleUnarchive(debt.id)}
+              />
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Add Debt Modal */}
@@ -134,9 +177,10 @@ export default function DebtsPage() {
   );
 }
 
-function DebtCard({ debt, onEdit, onDelete }) {
+function DebtCard({ debt, onEdit, onDelete, onArchive, onUnarchive, isArchived = false }) {
   const paid = debt.starting_balance - debt.current_balance;
   const percent = debt.starting_balance > 0 ? (paid / debt.starting_balance) * 100 : 0;
+  const canArchive = !isArchived && debt.current_balance <= 0;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-6 space-y-4">
@@ -149,13 +193,33 @@ function DebtCard({ debt, onEdit, onDelete }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onEdit}
-            className="text-gray-300 hover:text-blue-500 transition-colors"
-            title="Edit"
-          >
-            ✏️
-          </button>
+          {!isArchived && (
+            <button
+              onClick={onEdit}
+              className="text-gray-300 hover:text-blue-500 transition-colors"
+              title="Edit"
+            >
+              ✏️
+            </button>
+          )}
+          {canArchive && (
+            <button
+              onClick={onArchive}
+              className="text-gray-300 hover:text-amber-500 transition-colors"
+              title="Archive"
+            >
+              📦
+            </button>
+          )}
+          {isArchived && (
+            <button
+              onClick={onUnarchive}
+              className="text-gray-300 hover:text-green-500 transition-colors"
+              title="Restore"
+            >
+              ↩️
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="text-gray-300 hover:text-red-500 transition-colors"

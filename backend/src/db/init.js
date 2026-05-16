@@ -95,6 +95,13 @@ function initializeDatabase() {
     console.log('Migration complete: debts.account_last4 added.');
   }
 
+  const debtColInfo2 = db.prepare("PRAGMA table_info(debts)").all();
+  if (!debtColInfo2.find(c => c.name === 'archived_at')) {
+    console.log('Migrating debts: adding archived_at column...');
+    db.exec(`ALTER TABLE debts ADD COLUMN archived_at TEXT`);
+    console.log('Migration complete: debts.archived_at added.');
+  }
+
   const householdMigration = migrateLegacyUsersToHousehold(db);
   if (householdMigration.migrated) {
     console.log(`Consolidated ${householdMigration.removedUsers} legacy user profile(s) into one shared household ledger.`);

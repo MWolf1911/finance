@@ -3,10 +3,13 @@ const { getDb } = require('../db/init');
 const { ensureHouseholdUser } = require('../db/household');
 
 const DebtModel = {
-  getByUser() {
+  getByUser({ includeArchived = false } = {}) {
     const db = getDb();
     try {
-      return db.prepare('SELECT * FROM debts ORDER BY current_balance DESC').all();
+      const sql = includeArchived
+        ? 'SELECT * FROM debts ORDER BY archived_at IS NOT NULL, current_balance DESC'
+        : 'SELECT * FROM debts WHERE archived_at IS NULL ORDER BY current_balance DESC';
+      return db.prepare(sql).all();
     } finally {
       db.close();
     }
@@ -36,18 +39,82 @@ const DebtModel = {
     }
   },
 
-  update(id, { name, accountLast4, currentBalance, interestRate, minimumPayment }) {
+  update(id, updates) {
     const db = getDb();
     try {
+      const fields = [];
+      const values = [];
+
+      if (updates.name !== undefined) {
+        fields.push('name = ?');
+        values.push(updates.name);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'accountLast4')) {
+        fields.push('account_last4 = ?');
+        values.push(updates.accountLast4 ?? null);
+      }
+
+      if (updates.currentBalance !== undefined) {
+        fields.push('current_balance = ?');
+        values.push(updates.currentBalance);
+        if (updates.currentBalance > 0) {
+          // If a debt balance increases again, make it active automatically.
+          fields.push('archived_at = NULL');
+        }
+      }
+
+      if (updates.interestRate !== undefined) {
+        fields.push('interest_rate = ?');
+        values.push(updates.interestRate);
+      }
+
+      if (updates.minimumPayment !== undefined) {
+        fields.push('minimum_payment = ?');
+        values.push(updates.minimumPayment);
+      }
+
+      if (fields.length === 0) {
+        return false;
+      }
+
+      values.push(id);
       const result = db.prepare(`
         UPDATE debts
-        SET name = COALESCE(?, name),
-            account_last4 = COALESCE(?, account_last4),
-            current_balance = COALESCE(?, current_balance),
-            interest_rate = COALESCE(?, interest_rate),
-            minimum_payment = COALESCE(?, minimum_payment)
+        SET ${fields.join(', ')}
         WHERE id = ?
-      `).run(name, accountLast4, currentBalance, interestRate, minimumPayment, id);
+      `).run(...values);
+      return result.changes > 0;
+    } finally {
+      db.close();
+    }
+  },
+
+  archive(id) {
+    const db = getDb();
+    try {
+      const debt = db.prepare('SELECT current_balance, archived_at FROM debts WHERE id = ?').get(id);
+      if (!debt) {
+        return { ok: false, reason: 'not_found' };
+      }
+      if (debt.archived_at) {
+        return { ok: true, alreadyArchived: true };
+      }
+      if (debt.current_balance > 0) {
+        return { ok: false, reason: 'balance_remaining' };
+      }
+
+      db.prepare('UPDATE debts SET archived_at = datetime(\'now\') WHERE id = ?').run(id);
+      return { ok: true };
+    } finally {
+      db.close();
+    }
+  },
+
+  unarchive(id) {
+    const db = getDb();
+    try {
+      const result = db.prepare('UPDATE debts SET archived_at = NULL WHERE id = ?').run(id);
       return result.changes > 0;
     } finally {
       db.close();
@@ -68,7 +135,7 @@ const DebtModel = {
     const db = getDb();
     try {
       const result = db.prepare(
-        'SELECT COALESCE(SUM(current_balance), 0) as total FROM debts'
+        'SELECT COALESCE(SUM(current_balance), 0) as total FROM debts WHERE archived_at IS NULL'
       ).get();
       return result.total;
     } finally {

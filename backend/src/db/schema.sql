@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS debts (
     current_balance REAL NOT NULL CHECK(current_balance >= 0),
     interest_rate REAL NOT NULL DEFAULT 0 CHECK(interest_rate >= 0),
     minimum_payment REAL NOT NULL DEFAULT 0 CHECK(minimum_payment >= 0),
+    archived_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

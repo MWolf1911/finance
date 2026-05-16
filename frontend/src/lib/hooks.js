@@ -46,12 +46,12 @@ export function useTemplates() {
 }
 
 // ── Debts ──────────────────────────────────────────────────
-export function useDebts() {
+export function useDebts(includeArchived = false) {
   const { currentUser } = useAuth();
-  const key = currentUser ? ['debts'] : null;
+  const key = currentUser ? ['debts', includeArchived] : null;
 
   const { data, error, isLoading, mutate } = useSWR(key, () =>
-    api.getDebts()
+    api.getDebts({ includeArchived })
   );
 
   return { debts: data || [], error, isLoading, mutate };

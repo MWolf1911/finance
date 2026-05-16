@@ -6,7 +6,8 @@ const router = express.Router();
 
 // GET /api/debts
 router.get('/', (req, res) => {
-  const debts = DebtModel.getByUser();
+  const includeArchived = req.query.includeArchived === 'true';
+  const debts = DebtModel.getByUser({ includeArchived });
   res.json(debts);
 });
 
@@ -28,6 +29,27 @@ router.get('/projection', (req, res) => {
   const debts = DebtModel.getByUser();
   const projection = calculateProjection(debts, extra);
   res.json(projection);
+});
+
+// POST /api/debts/:id/archive
+router.post('/:id/archive', (req, res) => {
+  const result = DebtModel.archive(req.params.id);
+  if (!result.ok && result.reason === 'not_found') {
+    return res.status(404).json({ error: 'Debt not found' });
+  }
+  if (!result.ok && result.reason === 'balance_remaining') {
+    return res.status(400).json({ error: 'Only paid off debts can be archived' });
+  }
+  res.json({ success: true });
+});
+
+// POST /api/debts/:id/unarchive
+router.post('/:id/unarchive', (req, res) => {
+  const updated = DebtModel.unarchive(req.params.id);
+  if (!updated) {
+    return res.status(404).json({ error: 'Debt not found' });
+  }
+  res.json({ success: true });
 });
 
 // GET /api/debts/:id

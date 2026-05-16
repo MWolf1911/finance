@@ -55,7 +55,8 @@ export const api = {
   deleteTemplate: (id) => apiFetch(`/templates/${id}`, { method: 'DELETE' }),
 
   // Debts
-  getDebts: () => apiFetch('/debts'),
+  getDebts: ({ includeArchived = false } = {}) =>
+    apiFetch(`/debts?includeArchived=${includeArchived ? 'true' : 'false'}`),
   getDebtTotal: () => apiFetch('/debts/total'),
   getDebtProjection: (extraPayment = 0) =>
     apiFetch(`/debts/projection?extraPayment=${extraPayment}`),
@@ -67,6 +68,8 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  archiveDebt: (id) => apiFetch(`/debts/${id}/archive`, { method: 'POST' }),
+  unarchiveDebt: (id) => apiFetch(`/debts/${id}/unarchive`, { method: 'POST' }),
   deleteDebt: (id) => apiFetch(`/debts/${id}`, { method: 'DELETE' }),
 
   // Archives
