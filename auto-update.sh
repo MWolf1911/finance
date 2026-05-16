@@ -68,6 +68,6 @@ bash "${INSTALL_DIR}/install.sh" \
   --dir "$INSTALL_DIR" \
   --data-dir "$DATA_DIR" \
   --user "$APP_USER" \
-  --update-schedule "${AUTO_UPDATE_SCHEDULE:-daily}"
+  --update-schedule "${AUTO_UPDATE_SCHEDULE:-*-*-* *:0/5:00}"
 
 log "Auto-update complete."

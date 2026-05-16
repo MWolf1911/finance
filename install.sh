@@ -9,7 +9,7 @@ DATA_DIR="/var/lib/${APP_NAME}"
 REPO_URL=""
 REPO_REF="main"
 AUTO_UPDATE_ENABLED=1
-AUTO_UPDATE_SCHEDULE="daily"
+AUTO_UPDATE_SCHEDULE="*-*-* *:0/5:00"
 CONFIG_DIR="/etc/${APP_NAME}"
 CONFIG_FILE="${CONFIG_DIR}/autoupdate.conf"
 AUTO_UPDATE_SERVICE="${APP_NAME}-auto-update"
@@ -27,7 +27,7 @@ Options:
   --disable-auto-update
                      Disable the systemd auto-update timer.
   --update-schedule <expr>
-                     systemd OnCalendar schedule for auto-updates. Default: daily
+                     systemd OnCalendar schedule for auto-updates. Default: every 5 minutes
   --help             Show this help text.
 EOF
 }
@@ -230,7 +230,6 @@ Description=Schedule Finance Tracker Auto Updates
 [Timer]
 OnCalendar=${AUTO_UPDATE_SCHEDULE}
 Persistent=true
-RandomizedDelaySec=30m
 Unit=${AUTO_UPDATE_SERVICE}.service
 
 [Install]
