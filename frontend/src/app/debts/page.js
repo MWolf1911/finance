@@ -4,9 +4,8 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useDebts, useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { formatCurrency, getCurrentMonth, todayISO } from '@/lib/constants';
+import { formatCurrency, formatDebtLabel, getCurrentMonth, todayISO } from '@/lib/constants';
 import Modal from '@/components/Modal';
-import TransactionModal from '@/components/TransactionModal';
 
 export default function DebtsPage() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -143,7 +142,7 @@ function DebtCard({ debt, onEdit, onDelete }) {
     <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-6 space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-lg">{debt.name}</h3>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-lg">{formatDebtLabel(debt)}</h3>
           <div className="flex gap-4 mt-1 text-sm text-gray-500 dark:text-gray-400">
             {debt.interest_rate > 0 && <span>{debt.interest_rate}% APR</span>}
             {debt.minimum_payment > 0 && <span>Min: {formatCurrency(debt.minimum_payment)}/mo</span>}
@@ -194,6 +193,7 @@ function DebtCard({ debt, onEdit, onDelete }) {
 
 function AddDebtModal({ open, onClose, onSaved }) {
   const [name, setName] = useState('');
+  const [accountLast4, setAccountLast4] = useState('');
   const [startingBalance, setStartingBalance] = useState('');
   const [currentBalance, setCurrentBalance] = useState('');
   const [interestRate, setInterestRate] = useState('');
@@ -209,17 +209,22 @@ function AddDebtModal({ open, onClose, onSaved }) {
       setError('Name and starting balance are required');
       return;
     }
+    if (accountLast4 && !/^\d{4}$/.test(accountLast4)) {
+      setError('Last 4 must be exactly 4 digits');
+      return;
+    }
     setLoading(true);
     try {
       await api.createDebt({
         name,
+        accountLast4: accountLast4 || null,
         startingBalance: sb,
         currentBalance: parseFloat(currentBalance) || sb,
         interestRate: parseFloat(interestRate) || 0,
         minimumPayment: parseFloat(minimumPayment) || 0,
       });
       onSaved?.();
-      setName(''); setStartingBalance(''); setCurrentBalance('');
+      setName(''); setAccountLast4(''); setStartingBalance(''); setCurrentBalance('');
       setInterestRate(''); setMinimumPayment('');
       onClose();
     } catch (err) {
@@ -237,6 +242,13 @@ function AddDebtModal({ open, onClose, onSaved }) {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
             className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
             placeholder="e.g. Chase Credit Card" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Last 4</label>
+          <input type="text" inputMode="numeric" maxLength="4" value={accountLast4}
+            onChange={(e) => setAccountLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
+            placeholder="1234" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -286,6 +298,7 @@ function AddDebtModal({ open, onClose, onSaved }) {
 
 function EditDebtModal({ debt, onClose, onSaved }) {
   const [name, setName] = useState(debt.name);
+  const [accountLast4, setAccountLast4] = useState(debt.account_last4 || '');
   const [currentBalance, setCurrentBalance] = useState(String(debt.current_balance));
   const [interestRate, setInterestRate] = useState(String(debt.interest_rate || ''));
   const [minimumPayment, setMinimumPayment] = useState(String(debt.minimum_payment || ''));
@@ -298,6 +311,7 @@ function EditDebtModal({ debt, onClose, onSaved }) {
     const newBalance = parseFloat(currentBalance);
     if (!name) { setError('Name is required'); return; }
     if (isNaN(newBalance) || newBalance < 0) { setError('Valid balance is required'); return; }
+    if (accountLast4 && !/^\d{4}$/.test(accountLast4)) { setError('Last 4 must be exactly 4 digits'); return; }
 
     setLoading(true);
     try {
@@ -305,6 +319,7 @@ function EditDebtModal({ debt, onClose, onSaved }) {
 
       await api.updateDebt(debt.id, {
         name,
+        accountLast4: accountLast4 || null,
         currentBalance: newBalance,
         interestRate: parseFloat(interestRate) || 0,
         minimumPayment: parseFloat(minimumPayment) || 0,
@@ -317,7 +332,7 @@ function EditDebtModal({ debt, onClose, onSaved }) {
           category: 'Balance Adjustment',
           amount: Math.abs(balanceDiff),
           date: todayISO(),
-          description: `${debt.name}: balance ${balanceDiff > 0 ? 'increased' : 'decreased'} by ${formatCurrency(Math.abs(balanceDiff))}`,
+          description: `${formatDebtLabel(name, accountLast4)}: balance ${balanceDiff > 0 ? 'increased' : 'decreased'} by ${formatCurrency(Math.abs(balanceDiff))}`,
         });
       }
 
@@ -331,11 +346,17 @@ function EditDebtModal({ debt, onClose, onSaved }) {
   }
 
   return (
-    <Modal open={true} onClose={onClose} title={`Edit: ${debt.name}`}>
+    <Modal open={true} onClose={onClose} title={`Edit: ${formatDebtLabel(debt)}`}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Last 4</label>
+          <input type="text" inputMode="numeric" maxLength="4" value={accountLast4}
+            onChange={(e) => setAccountLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
             className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200" />
         </div>
         <div>

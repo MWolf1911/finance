@@ -88,6 +88,13 @@ function initializeDatabase() {
     console.log('Migration complete: recurring_templates.debt_id added.');
   }
 
+  const debtColInfo = db.prepare("PRAGMA table_info(debts)").all();
+  if (!debtColInfo.find(c => c.name === 'account_last4')) {
+    console.log('Migrating debts: adding account_last4 column...');
+    db.exec(`ALTER TABLE debts ADD COLUMN account_last4 TEXT`);
+    console.log('Migration complete: debts.account_last4 added.');
+  }
+
   const householdMigration = migrateLegacyUsersToHousehold(db);
   if (householdMigration.migrated) {
     console.log(`Consolidated ${householdMigration.removedUsers} legacy user profile(s) into one shared household ledger.`);

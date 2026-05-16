@@ -41,10 +41,14 @@ router.get('/:id', (req, res) => {
 
 // POST /api/debts
 router.post('/', (req, res) => {
-  const { name, startingBalance, currentBalance, interestRate, minimumPayment } = req.body;
+  const { name, accountLast4, startingBalance, currentBalance, interestRate, minimumPayment } = req.body;
 
   if (!name || startingBalance === undefined) {
     return res.status(400).json({ error: 'name and startingBalance are required' });
+  }
+
+  if (accountLast4 !== undefined && accountLast4 !== null && !/^\d{4}$/.test(String(accountLast4))) {
+    return res.status(400).json({ error: 'accountLast4 must be exactly 4 digits' });
   }
 
   if (typeof startingBalance !== 'number' || startingBalance < 0) {
@@ -52,7 +56,7 @@ router.post('/', (req, res) => {
   }
 
   try {
-    const debt = DebtModel.create({ name, startingBalance, currentBalance, interestRate, minimumPayment });
+    const debt = DebtModel.create({ name, accountLast4, startingBalance, currentBalance, interestRate, minimumPayment });
     res.status(201).json(debt);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create debt' });
@@ -61,9 +65,13 @@ router.post('/', (req, res) => {
 
 // PUT /api/debts/:id
 router.put('/:id', (req, res) => {
-  const { name, currentBalance, interestRate, minimumPayment } = req.body;
+  const { name, accountLast4, currentBalance, interestRate, minimumPayment } = req.body;
 
-  const updated = DebtModel.update(req.params.id, { name, currentBalance, interestRate, minimumPayment });
+  if (accountLast4 !== undefined && accountLast4 !== null && !/^\d{4}$/.test(String(accountLast4))) {
+    return res.status(400).json({ error: 'accountLast4 must be exactly 4 digits' });
+  }
+
+  const updated = DebtModel.update(req.params.id, { name, accountLast4, currentBalance, interestRate, minimumPayment });
   if (!updated) {
     return res.status(404).json({ error: 'Debt not found' });
   }

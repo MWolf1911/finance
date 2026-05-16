@@ -39,3 +39,14 @@ export function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+export function formatDebtLabel(debtOrName, last4) {
+  const name = typeof debtOrName === 'string' ? debtOrName : debtOrName?.name;
+  const accountLast4 = typeof debtOrName === 'string' ? last4 : debtOrName?.account_last4 ?? debtOrName?.accountLast4 ?? last4;
+
+  if (!name) {
+    return '';
+  }
+
+  return accountLast4 ? `${name} •••• ${accountLast4}` : name;
+}

@@ -21,32 +21,33 @@ const DebtModel = {
     }
   },
 
-  create({ name, startingBalance, currentBalance, interestRate = 0, minimumPayment = 0 }) {
+  create({ name, accountLast4 = null, startingBalance, currentBalance, interestRate = 0, minimumPayment = 0 }) {
     const db = getDb();
     try {
       const household = ensureHouseholdUser(db);
       const id = crypto.randomUUID();
       db.prepare(`
-        INSERT INTO debts (id, user_id, name, starting_balance, current_balance, interest_rate, minimum_payment)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, household.id, name, startingBalance, currentBalance ?? startingBalance, interestRate, minimumPayment);
-      return { id, userId: household.id, name, startingBalance, currentBalance: currentBalance ?? startingBalance, interestRate, minimumPayment };
+        INSERT INTO debts (id, user_id, name, account_last4, starting_balance, current_balance, interest_rate, minimum_payment)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, household.id, name, accountLast4 || null, startingBalance, currentBalance ?? startingBalance, interestRate, minimumPayment);
+      return { id, userId: household.id, name, accountLast4: accountLast4 || null, startingBalance, currentBalance: currentBalance ?? startingBalance, interestRate, minimumPayment };
     } finally {
       db.close();
     }
   },
 
-  update(id, { name, currentBalance, interestRate, minimumPayment }) {
+  update(id, { name, accountLast4, currentBalance, interestRate, minimumPayment }) {
     const db = getDb();
     try {
       const result = db.prepare(`
         UPDATE debts
         SET name = COALESCE(?, name),
+            account_last4 = COALESCE(?, account_last4),
             current_balance = COALESCE(?, current_balance),
             interest_rate = COALESCE(?, interest_rate),
             minimum_payment = COALESCE(?, minimum_payment)
         WHERE id = ?
-      `).run(name, currentBalance, interestRate, minimumPayment, id);
+      `).run(name, accountLast4, currentBalance, interestRate, minimumPayment, id);
       return result.changes > 0;
     } finally {
       db.close();

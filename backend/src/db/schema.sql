@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS debts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    account_last4 TEXT CHECK(length(account_last4) = 4 AND account_last4 GLOB '[0-9][0-9][0-9][0-9]'),
     starting_balance REAL NOT NULL CHECK(starting_balance >= 0),
     current_balance REAL NOT NULL CHECK(current_balance >= 0),
     interest_rate REAL NOT NULL DEFAULT 0 CHECK(interest_rate >= 0),

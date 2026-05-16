@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { CATEGORIES, todayISO } from '@/lib/constants';
+import { CATEGORIES, formatDebtLabel, todayISO } from '@/lib/constants';
 
 function getInitialFormState(editData) {
   const isDebtPayment = editData?.category === 'Debt Payment' || Boolean(editData?.debt_id);
@@ -78,8 +78,8 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
 
     const trimmedDescription = description.trim();
     return trimmedDescription
-      ? `${trimmedDescription} — ${selectedDebt.name}`
-      : `Payment — ${selectedDebt.name}`;
+      ? `${trimmedDescription} — ${formatDebtLabel(selectedDebt)}`
+      : `Payment — ${formatDebtLabel(selectedDebt)}`;
   }
 
   async function handleSubmit(e) {
@@ -285,7 +285,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
             >
               <option value="">Select a debt…</option>
               {debts.filter(d => d.current_balance > 0).map((d) => (
-                <option key={d.id} value={d.id}>{d.name} — ${d.current_balance.toFixed(2)} remaining</option>
+                <option key={d.id} value={d.id}>{formatDebtLabel(d)} — ${d.current_balance.toFixed(2)} remaining</option>
               ))}
             </select>
           </div>
