@@ -1,28 +1,66 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { CATEGORIES, todayISO } from '@/lib/constants';
 
+function getInitialFormState(editData, defaultDebtId) {
+  return {
+    type: editData?.type || 'Expense',
+    category: editData?.category || (defaultDebtId ? 'Debt Payment' : ''),
+    amount: editData?.amount?.toString() || '',
+    date: editData?.date || todayISO(),
+    description: editData?.description || '',
+    debtId: editData?.debt_id || defaultDebtId || '',
+    isRecurring: false,
+    recurrence: 'monthly',
+    dayOfMonth: '1',
+    startDate: '',
+    endDate: '',
+  };
+}
+
 export default function TransactionModal({ open, onClose, onSaved, editData, defaultDebtId }) {
   const { debts } = useDebts();
   const isEdit = !!editData;
+  const initialState = getInitialFormState(editData, defaultDebtId);
 
-  const [type, setType] = useState(editData?.type || 'Expense');
-  const [category, setCategory] = useState(editData?.category || (defaultDebtId ? 'Debt Payment' : ''));
-  const [amount, setAmount] = useState(editData?.amount?.toString() || '');
-  const [date, setDate] = useState(editData?.date || todayISO());
-  const [description, setDescription] = useState(editData?.description || '');
-  const [debtId, setDebtId] = useState(editData?.debt_id || defaultDebtId || '');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrence, setRecurrence] = useState('monthly');
-  const [dayOfMonth, setDayOfMonth] = useState('1');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [type, setType] = useState(initialState.type);
+  const [category, setCategory] = useState(initialState.category);
+  const [amount, setAmount] = useState(initialState.amount);
+  const [date, setDate] = useState(initialState.date);
+  const [description, setDescription] = useState(initialState.description);
+  const [debtId, setDebtId] = useState(initialState.debtId);
+  const [isRecurring, setIsRecurring] = useState(initialState.isRecurring);
+  const [recurrence, setRecurrence] = useState(initialState.recurrence);
+  const [dayOfMonth, setDayOfMonth] = useState(initialState.dayOfMonth);
+  const [startDate, setStartDate] = useState(initialState.startDate);
+  const [endDate, setEndDate] = useState(initialState.endDate);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const nextState = getInitialFormState(editData, defaultDebtId);
+    setType(nextState.type);
+    setCategory(nextState.category);
+    setAmount(nextState.amount);
+    setDate(nextState.date);
+    setDescription(nextState.description);
+    setDebtId(nextState.debtId);
+    setIsRecurring(nextState.isRecurring);
+    setRecurrence(nextState.recurrence);
+    setDayOfMonth(nextState.dayOfMonth);
+    setStartDate(nextState.startDate);
+    setEndDate(nextState.endDate);
+    setError('');
+    setLoading(false);
+  }, [open, editData, defaultDebtId]);
 
   const isDebtPayment = type === 'Expense' && category === 'Debt Payment';
   const selectedDebt = isDebtPayment ? debts.find(d => d.id === debtId) : null;
