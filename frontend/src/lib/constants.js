@@ -3,7 +3,7 @@ export const CATEGORIES = {
     'Rent/Mortgage', 'Utilities', 'Internet', 'Phone', 'Insurance',
     'Groceries', 'Dining Out', 'Transportation', 'Gas', 'Car Payment',
     'Medical', 'Subscriptions', 'Entertainment', 'Clothing', 'Personal Care',
-    'Education', 'Childcare', 'Pet', 'Home Maintenance', 'Gifts', 'Debt Payment', 'Other Expense',
+    'Education', 'Childcare', 'Pet', 'Home Maintenance', 'Gifts', 'Other Expense',
   ],
   Income: [
     'Salary', 'Freelance', 'Side Hustle', 'Bonus', 'Tax Refund',

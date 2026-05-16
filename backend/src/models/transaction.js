@@ -54,18 +54,53 @@ const TransactionModel = {
     }
   },
 
-  update(id, { type, category, amount, date, description }) {
+  update(id, updates) {
     const db = getDb();
     try {
+      const fields = [];
+      const values = [];
+
+      if (updates.type !== undefined) {
+        fields.push('type = ?');
+        values.push(updates.type);
+      }
+
+      if (updates.category !== undefined) {
+        fields.push('category = ?');
+        values.push(updates.category);
+      }
+
+      if (updates.amount !== undefined) {
+        fields.push('amount = ?');
+        values.push(updates.amount);
+      }
+
+      if (updates.date !== undefined) {
+        fields.push('date = ?');
+        values.push(updates.date);
+      }
+
+      if (updates.description !== undefined) {
+        fields.push('description = ?');
+        values.push(updates.description);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'debtId')) {
+        fields.push('debt_id = ?');
+        values.push(updates.debtId ?? null);
+      }
+
+      if (fields.length === 0) {
+        return false;
+      }
+
+      values.push(id);
+
       const result = db.prepare(`
         UPDATE transactions
-        SET type = COALESCE(?, type),
-            category = COALESCE(?, category),
-            amount = COALESCE(?, amount),
-            date = COALESCE(?, date),
-            description = COALESCE(?, description)
+        SET ${fields.join(', ')}
         WHERE id = ?
-      `).run(type, category, amount, date, description, id);
+      `).run(...values);
       return result.changes > 0;
     } finally {
       db.close();

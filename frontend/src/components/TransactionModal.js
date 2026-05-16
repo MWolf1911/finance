@@ -6,14 +6,17 @@ import { useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { CATEGORIES, todayISO } from '@/lib/constants';
 
-function getInitialFormState(editData, defaultDebtId) {
+function getInitialFormState(editData) {
+  const isDebtPayment = editData?.category === 'Debt Payment' || Boolean(editData?.debt_id);
+
   return {
-    type: editData?.type || 'Expense',
-    category: editData?.category || (defaultDebtId ? 'Debt Payment' : ''),
+    type: isDebtPayment ? 'Expense' : editData?.type || 'Expense',
+    category: isDebtPayment ? 'Debt Payment' : editData?.category || '',
     amount: editData?.amount?.toString() || '',
     date: editData?.date || todayISO(),
     description: editData?.description || '',
-    debtId: editData?.debt_id || defaultDebtId || '',
+    debtId: editData?.debt_id || '',
+    isDebtPayment,
     isRecurring: false,
     recurrence: 'monthly',
     dayOfMonth: '1',
@@ -22,10 +25,10 @@ function getInitialFormState(editData, defaultDebtId) {
   };
 }
 
-export default function TransactionModal({ open, onClose, onSaved, editData, defaultDebtId }) {
+export default function TransactionModal({ open, onClose, onSaved, editData }) {
   const { debts } = useDebts();
   const isEdit = !!editData;
-  const initialState = getInitialFormState(editData, defaultDebtId);
+  const initialState = getInitialFormState(editData);
 
   const [type, setType] = useState(initialState.type);
   const [category, setCategory] = useState(initialState.category);
@@ -33,6 +36,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
   const [date, setDate] = useState(initialState.date);
   const [description, setDescription] = useState(initialState.description);
   const [debtId, setDebtId] = useState(initialState.debtId);
+  const [isDebtPayment, setIsDebtPayment] = useState(initialState.isDebtPayment);
   const [isRecurring, setIsRecurring] = useState(initialState.isRecurring);
   const [recurrence, setRecurrence] = useState(initialState.recurrence);
   const [dayOfMonth, setDayOfMonth] = useState(initialState.dayOfMonth);
@@ -46,13 +50,14 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
       return;
     }
 
-    const nextState = getInitialFormState(editData, defaultDebtId);
+    const nextState = getInitialFormState(editData);
     setType(nextState.type);
     setCategory(nextState.category);
     setAmount(nextState.amount);
     setDate(nextState.date);
     setDescription(nextState.description);
     setDebtId(nextState.debtId);
+    setIsDebtPayment(nextState.isDebtPayment);
     setIsRecurring(nextState.isRecurring);
     setRecurrence(nextState.recurrence);
     setDayOfMonth(nextState.dayOfMonth);
@@ -60,10 +65,11 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
     setEndDate(nextState.endDate);
     setError('');
     setLoading(false);
-  }, [open, editData, defaultDebtId]);
+  }, [open, editData]);
 
-  const isDebtPayment = type === 'Expense' && category === 'Debt Payment';
   const selectedDebt = isDebtPayment ? debts.find(d => d.id === debtId) : null;
+  const normalizedType = isDebtPayment ? 'Expense' : type;
+  const normalizedCategory = isDebtPayment ? 'Debt Payment' : category;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -74,7 +80,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
       setError('Enter a valid amount');
       return;
     }
-    if (!category) {
+    if (!normalizedCategory) {
       setError('Select a category');
       return;
     }
@@ -103,11 +109,18 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
     setLoading(true);
     try {
       if (isEdit) {
-        await api.updateTransaction(editData.id, { type, category, amount: parsedAmount, date, description });
+        await api.updateTransaction(editData.id, {
+          type: normalizedType,
+          category: normalizedCategory,
+          amount: parsedAmount,
+          date,
+          description,
+          debtId: isDebtPayment ? debtId : null,
+        });
       } else {
         const payload = {
-          type,
-          category,
+          type: normalizedType,
+          category: normalizedCategory,
           amount: parsedAmount,
           date,
           description: description || (isDebtPayment && selectedDebt ? `Payment → ${selectedDebt.name}` : ''),
@@ -140,13 +153,29 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
             <button
               key={t}
               type="button"
-              onClick={() => { setType(t); setCategory(''); }}
+              onClick={() => {
+                setType(t);
+                if (t === 'Income') {
+                  setIsDebtPayment(false);
+                  setDebtId('');
+                  setCategory('');
+                  return;
+                }
+
+                if (isDebtPayment) {
+                  setCategory('Debt Payment');
+                  return;
+                }
+
+                setCategory('');
+              }}
+              disabled={isDebtPayment && t === 'Income'}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
                 type === t
                   ? t === 'Expense'
                     ? 'bg-red-500 text-white'
                     : 'bg-green-500 text-white'
-                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-gray-700'
               }`}
             >
               {t}
@@ -155,34 +184,23 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
         </div>
 
         {/* Category */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-          <select
-            value={category}
-            onChange={(e) => { setCategory(e.target.value); if (e.target.value !== 'Debt Payment') setDebtId(''); }}
-            className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
-          >
-            <option value="">Select category…</option>
-            {CATEGORIES[type].map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Debt selector — shown when Debt Payment category is active */}
-        {isDebtPayment && (
+        {!isDebtPayment ? (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Which Debt?</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
             <select
-              value={debtId}
-              onChange={(e) => setDebtId(e.target.value)}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
             >
-              <option value="">Select a debt…</option>
-              {debts.filter(d => d.current_balance > 0).map((d) => (
-                <option key={d.id} value={d.id}>{d.name} — ${d.current_balance.toFixed(2)} remaining</option>
+              <option value="">Select category…</option>
+              {CATEGORIES[type].map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+            This transaction will be logged as a debt payment.
           </div>
         )}
 
@@ -222,6 +240,45 @@ export default function TransactionModal({ open, onClose, onSaved, editData, def
             placeholder="e.g. Weekly grocery run"
           />
         </div>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isDebtPayment}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setIsDebtPayment(checked);
+              setError('');
+
+              if (checked) {
+                setType('Expense');
+                setCategory('Debt Payment');
+                return;
+              }
+
+              setDebtId('');
+              setCategory('');
+            }}
+            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Apply this transaction to a debt</span>
+        </label>
+
+        {isDebtPayment && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Which Debt?</label>
+            <select
+              value={debtId}
+              onChange={(e) => setDebtId(e.target.value)}
+              className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
+            >
+              <option value="">Select a debt…</option>
+              {debts.filter(d => d.current_balance > 0).map((d) => (
+                <option key={d.id} value={d.id}>{d.name} — ${d.current_balance.toFixed(2)} remaining</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Recurring toggle — only on create */}
         {!isEdit && (

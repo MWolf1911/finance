@@ -17,7 +17,6 @@ export default function DebtsPage() {
   const { mutate: mutateTransactions } = useTransactions(month, year);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [payDebt, setPayDebt] = useState(null);
   const [editDebt, setEditDebt] = useState(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
@@ -108,7 +107,6 @@ export default function DebtsPage() {
               <DebtCard
                 key={debt.id}
                 debt={debt}
-                onPay={() => setPayDebt(debt)}
                 onEdit={() => setEditDebt(debt)}
                 onDelete={() => handleDelete(debt.id)}
               />
@@ -133,20 +131,11 @@ export default function DebtsPage() {
         />
       )}
 
-      {/* Debt Payment via TransactionModal */}
-      {payDebt && (
-        <TransactionModal
-          open={true}
-          onClose={() => setPayDebt(null)}
-          onSaved={refreshAll}
-          defaultDebtId={payDebt.id}
-        />
-      )}
     </div>
   );
 }
 
-function DebtCard({ debt, onPay, onEdit, onDelete }) {
+function DebtCard({ debt, onEdit, onDelete }) {
   const paid = debt.starting_balance - debt.current_balance;
   const percent = debt.starting_balance > 0 ? (paid / debt.starting_balance) * 100 : 0;
 
@@ -199,14 +188,6 @@ function DebtCard({ debt, onPay, onEdit, onDelete }) {
           <span>of {formatCurrency(debt.starting_balance)}</span>
         </div>
       </div>
-
-      {/* Actions */}
-      <button
-        onClick={onPay}
-        className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
-      >
-        💸 Make Payment
-      </button>
     </div>
   );
 }
