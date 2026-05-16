@@ -71,6 +71,17 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
   const normalizedType = isDebtPayment ? 'Expense' : type;
   const normalizedCategory = isDebtPayment ? 'Debt Payment' : category;
 
+  function buildDebtPaymentDescription() {
+    if (!isDebtPayment || !selectedDebt) {
+      return description;
+    }
+
+    const trimmedDescription = description.trim();
+    return trimmedDescription
+      ? `${trimmedDescription} — ${selectedDebt.name}`
+      : `Payment — ${selectedDebt.name}`;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -123,7 +134,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
           category: normalizedCategory,
           amount: parsedAmount,
           date,
-          description: description || (isDebtPayment && selectedDebt ? `Payment → ${selectedDebt.name}` : ''),
+          description: buildDebtPaymentDescription(),
           isRecurring,
           debtId: isDebtPayment ? debtId : null,
         };
