@@ -8,6 +8,11 @@ INSTALL_DIR="/opt/${APP_NAME}"
 DATA_DIR="/var/lib/${APP_NAME}"
 REPO_URL=""
 REPO_REF="main"
+AUTO_UPDATE_ENABLED=1
+AUTO_UPDATE_SCHEDULE="daily"
+CONFIG_DIR="/etc/${APP_NAME}"
+CONFIG_FILE="${CONFIG_DIR}/autoupdate.conf"
+AUTO_UPDATE_SERVICE="${APP_NAME}-auto-update"
 
 usage() {
   cat <<'EOF'
@@ -19,6 +24,10 @@ Options:
   --dir <path>       Install location. Default: /opt/finance-tracker
   --data-dir <path>  Database and runtime data directory. Default: /var/lib/finance-tracker
   --user <name>      Service user. Default: finance-tracker
+  --disable-auto-update
+                     Disable the systemd auto-update timer.
+  --update-schedule <expr>
+                     systemd OnCalendar schedule for auto-updates. Default: daily
   --help             Show this help text.
 EOF
 }
@@ -30,6 +39,21 @@ log() {
 fail() {
   printf '[install] %s\n' "$1" >&2
   exit 1
+}
+
+write_config_file() {
+  mkdir -p "$CONFIG_DIR"
+  {
+    printf 'APP_NAME=%q\n' "$APP_NAME"
+    printf 'APP_USER=%q\n' "$APP_USER"
+    printf 'APP_GROUP=%q\n' "$APP_GROUP"
+    printf 'INSTALL_DIR=%q\n' "$INSTALL_DIR"
+    printf 'DATA_DIR=%q\n' "$DATA_DIR"
+    printf 'REPO_URL=%q\n' "$REPO_URL"
+    printf 'REPO_REF=%q\n' "$REPO_REF"
+    printf 'AUTO_UPDATE_ENABLED=%q\n' "$AUTO_UPDATE_ENABLED"
+    printf 'AUTO_UPDATE_SCHEDULE=%q\n' "$AUTO_UPDATE_SCHEDULE"
+  } > "$CONFIG_FILE"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -53,6 +77,14 @@ while [ "$#" -gt 0 ]; do
     --user)
       APP_USER="${2:-}"
       APP_GROUP="$APP_USER"
+      shift 2
+      ;;
+    --disable-auto-update)
+      AUTO_UPDATE_ENABLED=0
+      shift
+      ;;
+    --update-schedule)
+      AUTO_UPDATE_SCHEDULE="${2:-}"
       shift 2
       ;;
     --help)
@@ -176,6 +208,36 @@ WantedBy=multi-user.target
 EOF
 }
 
+write_auto_update_service_file() {
+  cat > /etc/systemd/system/${AUTO_UPDATE_SERVICE}.service <<EOF
+[Unit]
+Description=Finance Tracker Auto Update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=/usr/bin/env bash ${INSTALL_DIR}/auto-update.sh
+EOF
+}
+
+write_auto_update_timer_file() {
+  cat > /etc/systemd/system/${AUTO_UPDATE_SERVICE}.timer <<EOF
+[Unit]
+Description=Schedule Finance Tracker Auto Updates
+
+[Timer]
+OnCalendar=${AUTO_UPDATE_SCHEDULE}
+Persistent=true
+RandomizedDelaySec=30m
+Unit=${AUTO_UPDATE_SERVICE}.service
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
 log "Updating apt package metadata"
 apt-get update
 ensure_apt_package ca-certificates
@@ -203,6 +265,9 @@ mkdir -p "$INSTALL_DIR/backend/data"
 chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
 chown -R "$APP_USER:$APP_GROUP" "$INSTALL_DIR/backend/data"
 
+log "Writing install config"
+write_config_file
+
 log "Installing backend dependencies"
 install_node_modules "$INSTALL_DIR/backend"
 
@@ -215,12 +280,37 @@ npm run build --prefix "$INSTALL_DIR/frontend"
 log "Writing systemd service"
 write_service_file
 
+if [ -n "$REPO_URL" ] && [ "$AUTO_UPDATE_ENABLED" -eq 1 ]; then
+  log "Writing auto-update service (${AUTO_UPDATE_SCHEDULE})"
+  write_auto_update_service_file
+  write_auto_update_timer_file
+  auto_update_ready=1
+else
+  if [ "$AUTO_UPDATE_ENABLED" -eq 1 ]; then
+    log "Auto-update skipped because no repository URL was provided."
+  else
+    log "Auto-update disabled."
+  fi
+  systemctl disable --now "${AUTO_UPDATE_SERVICE}.timer" >/dev/null 2>&1 || true
+  rm -f "/etc/systemd/system/${AUTO_UPDATE_SERVICE}.service"
+  rm -f "/etc/systemd/system/${AUTO_UPDATE_SERVICE}.timer"
+  auto_update_ready=0
+fi
+
 log "Enabling and restarting service"
 systemctl daemon-reload
 systemctl enable "$APP_NAME"
 systemctl restart "$APP_NAME"
 
+if [ "$auto_update_ready" -eq 1 ]; then
+  systemctl enable "${AUTO_UPDATE_SERVICE}.timer"
+  systemctl restart "${AUTO_UPDATE_SERVICE}.timer"
+fi
+
 log "Installation complete"
 log "Frontend: http://$(hostname -I | awk '{print $1}'):3000"
 log "Backend:  http://$(hostname -I | awk '{print $1}'):3001/api/health"
 log "Service:  systemctl status ${APP_NAME}"
+if [ "$auto_update_ready" -eq 1 ]; then
+  log "Auto-updates: systemctl list-timers ${AUTO_UPDATE_SERVICE}.timer"
+fi
