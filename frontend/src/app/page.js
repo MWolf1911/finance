@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { formatCurrency, getCurrentMonth, getMonthName, formatDate } from '@/lib/constants';
@@ -113,6 +113,17 @@ function DebtOverview() {
   const [startingBalance, setStartingBalance] = useState('');
   const [extraPayment, setExtraPayment] = useState(0);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem('finance.dashboard.startingBalance');
+    if (saved) {
+      setStartingBalance(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('finance.dashboard.startingBalance', startingBalance);
+  }, [startingBalance]);
+
   if (totalLoading) return null;
   if (total === 0) return null;
 
@@ -187,7 +198,7 @@ function DebtOverview() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 p-5 space-y-4">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100">Extra monthly payment</h4>
