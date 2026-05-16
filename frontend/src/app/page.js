@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useMonthlySummary, useTransactions, useDebtTotal, useDebtProjection } from '@/lib/hooks';
+import { useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { formatCurrency, getCurrentMonth, getMonthName, formatDate } from '@/lib/constants';
 import TransactionModal from '@/components/TransactionModal';
 
@@ -110,105 +110,157 @@ export default function DashboardPage() {
 
 function DebtOverview() {
   const { total, isLoading: totalLoading } = useDebtTotal();
+  const [startingBalance, setStartingBalance] = useState('');
   const [extraPayment, setExtraPayment] = useState(0);
-  const { projection, isLoading: projLoading } = useDebtProjection(extraPayment);
 
   if (totalLoading) return null;
   if (total === 0) return null;
 
-  const snowball = projection?.snowball;
-  const avalanche = projection?.avalanche;
+  const parsedStartingBalance = parseFloat(startingBalance);
+  const hasStartingBalance = Number.isFinite(parsedStartingBalance) && parsedStartingBalance > 0;
+  const paidDown = hasStartingBalance ? Math.max(parsedStartingBalance - total, 0) : null;
+  const progress = hasStartingBalance ? Math.min((paidDown / parsedStartingBalance) * 100, 100) : null;
+  const monthlyGain = extraPayment;
+  const estimatedMonths = extraPayment > 0 ? Math.ceil(total / extraPayment) : null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-lg">Debt Payoff Overview</h3>
-        <span className="text-xl font-bold text-red-600">{formatCurrency(total)}</span>
-      </div>
-
-      {/* Extra Payment Slider */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Extra Monthly Payment</label>
-          <span className="text-sm font-bold text-blue-600">{formatCurrency(extraPayment)}/mo</span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="2000"
-          step="25"
-          value={extraPayment}
-          onChange={(e) => setExtraPayment(Number(e.target.value))}
-          className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
-        />
-        <div className="flex justify-between text-xs text-gray-400 mt-1">
-          <span>$0</span>
-          <span>$500</span>
-          <span>$1,000</span>
-          <span>$1,500</span>
-          <span>$2,000</span>
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-slate-50 to-white dark:from-gray-800 dark:to-gray-800">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">Debt payoff overview</p>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">Track the household payoff runway</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Use your original debt total to see what you have paid down and how much remains.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[320px]">
+            <MiniMetric label="Current debt" value={formatCurrency(total)} accent="red" />
+            <MiniMetric label="Estimated months @ extra payment" value={estimatedMonths ? `${estimatedMonths} mo` : '—'} accent="blue" />
+          </div>
         </div>
       </div>
 
-      {/* Strategy Comparison */}
-      {projLoading ? (
-        <div className="text-center py-4 text-sm text-gray-400">Calculating projections…</div>
-      ) : snowball && avalanche ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <StrategyCard
-            name="Avalanche"
-            subtitle="Highest interest first"
-            months={avalanche.totalMonths}
-            interest={avalanche.totalInterest}
-            highlight={avalanche.totalInterest <= snowball.totalInterest}
-          />
-          <StrategyCard
-            name="Snowball"
-            subtitle="Smallest balance first"
-            months={snowball.totalMonths}
-            interest={snowball.totalInterest}
-            highlight={snowball.totalInterest < avalanche.totalInterest}
-          />
-        </div>
-      ) : null}
+      <div className="p-6 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Starting balance</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={startingBalance}
+              onChange={(e) => setStartingBalance(e.target.value)}
+              placeholder="Enter original debt total"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">This is only used for the dashboard calculation and does not change your actual debt records.</p>
+          </div>
 
-      {/* Savings callout */}
-      {snowball && avalanche && Math.abs(avalanche.totalInterest - snowball.totalInterest) >= 1 && (
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300">
-          <strong>Avalanche saves you {formatCurrency(snowball.totalInterest - avalanche.totalInterest)}</strong> in interest
-          {avalanche.totalMonths < snowball.totalMonths &&
-            ` and pays off ${snowball.totalMonths - avalanche.totalMonths} month${snowball.totalMonths - avalanche.totalMonths !== 1 ? 's' : ''} sooner`
-          }!
+          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatTile label="Paid down" value={hasStartingBalance ? formatCurrency(paidDown) : '—'} tone="green" />
+            <StatTile label="Remaining" value={formatCurrency(total)} tone="red" />
+            <StatTile
+              label="Progress"
+              value={hasStartingBalance ? `${progress.toFixed(1)}%` : '—'}
+              tone="slate"
+            />
+          </div>
         </div>
-      )}
+
+        {hasStartingBalance && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-300">Payoff progress</span>
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(paidDown)} of {formatCurrency(parsedStartingBalance)}</span>
+            </div>
+            <div className="h-4 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-lime-400 to-blue-500 transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span>0%</span>
+              <span>{progress >= 50 ? 'Halfway there' : 'In progress'}</span>
+              <span>100%</span>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Extra monthly payment</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400">See how extra principal speeds up the payoff.</p>
+              </div>
+              <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(monthlyGain)}/mo</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="2000"
+              step="25"
+              value={extraPayment}
+              onChange={(e) => setExtraPayment(Number(e.target.value))}
+              className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>$0</span>
+              <span>$500</span>
+              <span>$1,000</span>
+              <span>$1,500</span>
+              <span>$2,000</span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-5 bg-white dark:bg-gray-800 space-y-3">
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100">Quick snapshot</h4>
+            <OverviewLine label="Current monthly debt total" value={formatCurrency(total)} />
+            <OverviewLine label="Starting balance" value={hasStartingBalance ? formatCurrency(parsedStartingBalance) : 'Enter a value'} />
+            <OverviewLine label="Already paid" value={hasStartingBalance ? formatCurrency(paidDown) : '—'} />
+            <OverviewLine label="Projected months with extra payment" value={estimatedMonths ? `${estimatedMonths} month${estimatedMonths !== 1 ? 's' : ''}` : 'Set extra payment'} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function StrategyCard({ name, subtitle, months, interest, highlight }) {
-  const years = Math.floor(months / 12);
-  const remainingMonths = months % 12;
-  const timeStr = years > 0
-    ? `${years}y ${remainingMonths}mo`
-    : `${remainingMonths}mo`;
+function MiniMetric({ label, value, accent }) {
+  const accentClasses = {
+    red: 'from-red-500 to-orange-500',
+    blue: 'from-blue-500 to-cyan-500',
+  };
 
   return (
-    <div className={`rounded-lg p-4 border-2 ${highlight ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {highlight && <span className="text-green-500 text-sm">★</span>}
-        <h4 className="font-semibold text-gray-800 dark:text-gray-100">{name}</h4>
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{subtitle}</p>
-      <div className="space-y-1">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500 dark:text-gray-400">Time to payoff</span>
-          <span className="font-semibold text-gray-800 dark:text-gray-200">{timeStr}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500 dark:text-gray-400">Total interest</span>
-          <span className="font-semibold text-red-600">{formatCurrency(interest)}</span>
-        </div>
-      </div>
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+      <div className={`h-1.5 w-10 rounded-full bg-gradient-to-r ${accentClasses[accent] || accentClasses.blue} mb-3`} />
+      <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-lg font-bold text-gray-900 dark:text-gray-100">{value}</p>
+    </div>
+  );
+}
+
+function StatTile({ label, value, tone }) {
+  const toneClasses = {
+    green: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300',
+    red: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300',
+    slate: 'bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200',
+  };
+
+  return (
+    <div className={`rounded-2xl p-4 border border-gray-200 dark:border-gray-700 ${toneClasses[tone] || toneClasses.slate}`}>
+      <p className="text-xs uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-2 text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function OverviewLine({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+      <span className="text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">{value}</span>
     </div>
   );
 }
