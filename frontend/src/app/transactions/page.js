@@ -17,7 +17,7 @@ export default function TransactionsPage() {
   const { currentUser, loading: authLoading } = useAuth();
   const { month, year } = getCurrentMonth();
   const { transactions, isLoading, mutate } = useTransactions(month, year);
-  const { mutate: mutateSummary } = useMonthlySummary(month, year);
+  const { summary, mutate: mutateSummary } = useMonthlySummary(month, year);
   const { templates, mutate: mutateTemplates } = useTemplates();
   const { categories } = useCategories();
   const { settings } = useAppSettings();
@@ -66,6 +66,29 @@ export default function TransactionsPage() {
   const incomeCategories = useMemo(
     () => [...(categories.Income || [])].sort((a, b) => a.localeCompare(b)),
     [categories]
+  );
+  const monthlyCategoryTotals = useMemo(
+    () => Object.fromEntries((summary?.byCategory || []).map((item) => [`${item.type}:${item.category}`, item.total])),
+    [summary]
+  );
+  const overBudgetExpenseRows = useMemo(
+    () => Object.entries(settings.budgetTargets?.Expense || {})
+      .map(([category, target]) => {
+        const actual = monthlyCategoryTotals[`Expense:${category}`] ?? 0;
+        return {
+          category,
+          target,
+          actual,
+          overBy: actual - target,
+        };
+      })
+      .filter((row) => row.overBy > 0)
+      .sort((a, b) => b.overBy - a.overBy),
+    [monthlyCategoryTotals, settings]
+  );
+  const overBudgetByCategory = useMemo(
+    () => Object.fromEntries(overBudgetExpenseRows.map((row) => [row.category, row])),
+    [overBudgetExpenseRows]
   );
 
   const refreshIntervalSeconds = settings.liveRefresh?.intervalSeconds ?? 10;
@@ -167,6 +190,25 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {overBudgetExpenseRows.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-900/40 shadow-sm p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Expense categories over budget</p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Targets come from Settings.</p>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {overBudgetExpenseRows.map((row) => (
+              <span
+                key={`over-budget-${row.category}`}
+                className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 font-medium"
+              >
+                {row.category}: {formatCurrency(row.overBy)} over
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Transaction list */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm overflow-hidden">
         {isLoading ? (
@@ -220,7 +262,14 @@ export default function TransactionsPage() {
               >
                 {/* Category + Description */}
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{tx.category}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{tx.category}</p>
+                    {tx.type === 'Expense' && overBudgetByCategory[tx.category] && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 font-medium whitespace-nowrap">
+                        Over budget
+                      </span>
+                    )}
+                  </div>
                   {tx.description && (
                     <p className="text-sm text-gray-400 truncate">{tx.description}</p>
                   )}

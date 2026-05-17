@@ -18,6 +18,11 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
+async function parseApiError(res) {
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body.error || `API error: ${res.status}`);
+}
+
 export const api = {
   // Health / Lazy Generation trigger
   health: () => apiFetch('/health'),
@@ -90,6 +95,36 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  downloadBackup: async () => {
+    const res = await fetch(`${API_BASE}/settings/backup`);
+    if (!res.ok) {
+      await parseApiError(res);
+    }
+
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^\"]+)"?/i);
+
+    return {
+      blob: await res.blob(),
+      fileName: match?.[1] || 'finance-backup.db',
+    };
+  },
+  restoreBackup: async (file) => {
+    const payload = await file.arrayBuffer();
+    const res = await fetch(`${API_BASE}/settings/restore`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: payload,
+    });
+
+    if (!res.ok) {
+      await parseApiError(res);
+    }
+
+    return res.json();
+  },
   getCategories: () => apiFetch('/settings/categories'),
   updateCategories: (data) => apiFetch('/settings/categories', {
     method: 'PUT',

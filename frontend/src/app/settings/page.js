@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useAppSettings, useCategories } from '@/lib/hooks';
 import { api } from '@/lib/api';
@@ -73,6 +73,7 @@ export default function SettingsPage() {
   const { currentUser, loading: authLoading } = useAuth();
   const { categories, isLoading: categoriesLoading, mutate: mutateCategories } = useCategories();
   const { settings, isLoading: settingsLoading, mutate: mutateSettings } = useAppSettings();
+  const restoreInputRef = useRef(null);
 
   const [categoryDraft, setCategoryDraft] = useState(DEFAULT_CATEGORIES);
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_APP_SETTINGS);
@@ -82,7 +83,11 @@ export default function SettingsPage() {
   const [editing, setEditing] = useState({ type: null, index: -1, value: '' });
   const [savingCategories, setSavingCategories] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
   const [error, setError] = useState('');
+  const [backupMessage, setBackupMessage] = useState('');
+  const [backupError, setBackupError] = useState('');
 
   useEffect(() => {
     if (!categoriesLoading) {
@@ -147,6 +152,54 @@ export default function SettingsPage() {
       setError(err.message || 'Failed to save settings');
     } finally {
       setSavingSettings(false);
+    }
+  }
+
+  async function handleDownloadBackup() {
+    setDownloadingBackup(true);
+    setBackupError('');
+    setBackupMessage('');
+    try {
+      const { blob, fileName } = await api.downloadBackup();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setBackupMessage(`Downloaded ${fileName}`);
+    } catch (err) {
+      setBackupError(err.message || 'Failed to download backup');
+    } finally {
+      setDownloadingBackup(false);
+    }
+  }
+
+  async function handleRestoreSelection(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    if (!confirm(`Restore backup from ${file.name}? This replaces the current database.`)) {
+      return;
+    }
+
+    setRestoringBackup(true);
+    setBackupError('');
+    setBackupMessage('');
+    try {
+      const result = await api.restoreBackup(file);
+      await Promise.all([mutateCategories(), mutateSettings()]);
+      setBackupMessage(`Restored ${file.name} at ${new Date(result.restoredAt).toLocaleString()}. Refresh other open pages if needed.`);
+    } catch (err) {
+      setBackupError(err.message || 'Failed to restore backup');
+    } finally {
+      setRestoringBackup(false);
     }
   }
 
@@ -445,6 +498,56 @@ export default function SettingsPage() {
             Controls how often live pages check for changes made by another user.
           </p>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Backup & Restore</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Download a full database snapshot or restore the app from a previous backup file.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadBackup}
+            disabled={downloadingBackup || restoringBackup}
+            className="px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {downloadingBackup ? 'Downloading…' : 'Download Backup'}
+          </button>
+          <button
+            type="button"
+            onClick={() => restoreInputRef.current?.click()}
+            disabled={downloadingBackup || restoringBackup}
+            className="px-4 py-2.5 border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300 rounded-lg font-medium hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 transition-colors"
+          >
+            {restoringBackup ? 'Restoring…' : 'Restore Backup'}
+          </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept=".db,.sqlite,.sqlite3,application/octet-stream"
+            onChange={handleRestoreSelection}
+            className="hidden"
+          />
+        </div>
+
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Restore replaces the current household data. Download a fresh backup first if you may want to undo the restore.
+        </p>
+
+        {backupMessage && (
+          <div className="rounded-lg border border-green-200 bg-green-50 text-green-700 px-4 py-3 text-sm dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300">
+            {backupMessage}
+          </div>
+        )}
+        {backupError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+            {backupError}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">

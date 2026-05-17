@@ -90,6 +90,7 @@ export default function DashboardPage() {
       }
       return a.category.localeCompare(b.category);
     });
+  const overBudgetExpenseRows = budgetRows.filter((row) => row.type === 'Expense' && row.difference < 0);
 
   async function saveStartingBalance() {
     if (!Number.isFinite(parsedStartingBalance)) {
@@ -316,6 +317,22 @@ export default function DashboardPage() {
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">Update targets from Settings.</p>
         </div>
+
+        {overBudgetExpenseRows.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-900/20">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Over budget this month</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {overBudgetExpenseRows.map((row) => (
+                <span
+                  key={`warning-${row.category}`}
+                  className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 font-medium"
+                >
+                  {row.category}: {formatCurrency(Math.abs(row.difference))} over
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {budgetRows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
