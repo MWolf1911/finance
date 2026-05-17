@@ -51,6 +51,15 @@ export default function TransactionsPage() {
     });
   }, [transactions, filterType, filterCategory, search, sortKey, sortDir]);
 
+  const expenseCategories = useMemo(
+    () => [...(categories.Expense || [])].sort((a, b) => a.localeCompare(b)),
+    [categories]
+  );
+  const incomeCategories = useMemo(
+    () => [...(categories.Income || [])].sort((a, b) => a.localeCompare(b)),
+    [categories]
+  );
+
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
 
@@ -72,15 +81,6 @@ export default function TransactionsPage() {
     await api.deleteTemplate(id);
     mutateTemplates();
   }
-
-  const expenseCategories = useMemo(
-    () => [...(categories.Expense || [])].sort((a, b) => a.localeCompare(b)),
-    [categories]
-  );
-  const incomeCategories = useMemo(
-    () => [...(categories.Income || [])].sort((a, b) => a.localeCompare(b)),
-    [categories]
-  );
 
   return (
     <div className="space-y-6">
