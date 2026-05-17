@@ -25,6 +25,14 @@ export const api = {
   // Shared household profile
   getHousehold: () => apiFetch('/household'),
 
+  // Dashboard
+  getDashboardBalance: (year, month) =>
+    apiFetch(`/dashboard/balance?year=${year}&month=${month}`),
+  updateDashboardBalance: (year, month, data) => apiFetch(`/dashboard/balance?year=${year}&month=${month}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
   // Transactions
   getTransactions: (params = {}) => {
     const q = new URLSearchParams(params).toString();

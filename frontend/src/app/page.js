@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useMonthlySummary, useTransactions } from '@/lib/hooks';
+import { useDashboardBalance, useMonthlySummary, useTransactions } from '@/lib/hooks';
+import { api } from '@/lib/api';
 import { formatCurrency, getCurrentMonth, getMonthName, formatDate } from '@/lib/constants';
 import TransactionModal from '@/components/TransactionModal';
 
@@ -11,29 +12,51 @@ export default function DashboardPage() {
   const { month, year } = getCurrentMonth();
   const { summary, mutate: mutateSummary } = useMonthlySummary(month, year);
   const { transactions, mutate: mutateTransactions } = useTransactions(month, year);
+  const { balance, mutate: mutateBalance } = useDashboardBalance(month, year);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [startingBalance, setStartingBalance] = useState('');
+  const [startingBalanceInput, setStartingBalanceInput] = useState('0');
+  const [balanceError, setBalanceError] = useState('');
+  const [isSavingBalance, setIsSavingBalance] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('finance.dashboard.startingBalance');
-    if (saved) {
-      setStartingBalance(saved);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem('finance.dashboard.startingBalance', startingBalance);
-  }, [startingBalance]);
+    setStartingBalanceInput(String(balance.startingBalance ?? 0));
+  }, [balance.startingBalance, month, year]);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
 
   const recentTransactions = transactions.slice(0, 5);
-  const parsedStartingBalance = parseFloat(startingBalance);
+  const parsedStartingBalance = parseFloat(startingBalanceInput);
   const hasStartingBalance = Number.isFinite(parsedStartingBalance);
   const endingBalance = hasStartingBalance
     ? parsedStartingBalance + ((summary?.income ?? 0) - (summary?.expenses ?? 0))
     : null;
+
+  async function saveStartingBalance() {
+    if (!Number.isFinite(parsedStartingBalance)) {
+      setStartingBalanceInput(String(balance.startingBalance ?? 0));
+      setBalanceError('');
+      return;
+    }
+
+    if (Math.abs(parsedStartingBalance - (balance.startingBalance ?? 0)) < 0.005) {
+      return;
+    }
+
+    setIsSavingBalance(true);
+    setBalanceError('');
+    try {
+      const updated = await api.updateDashboardBalance(year, month, {
+        startingBalance: parsedStartingBalance,
+      });
+      await mutateBalance(updated, false);
+    } catch (err) {
+      setBalanceError(err.message || 'Failed to save balance');
+      setStartingBalanceInput(String(balance.startingBalance ?? 0));
+    } finally {
+      setIsSavingBalance(false);
+    }
+  }
 
   function handleSaved() {
     mutateSummary();
@@ -72,8 +95,15 @@ export default function DashboardPage() {
             <input
               type="number"
               step="0.01"
-              value={startingBalance}
-              onChange={(e) => setStartingBalance(e.target.value)}
+              value={startingBalanceInput}
+              onChange={(e) => setStartingBalanceInput(e.target.value)}
+              onBlur={saveStartingBalance}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveStartingBalance();
+                }
+              }}
               placeholder="0.00"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             />
@@ -84,6 +114,17 @@ export default function DashboardPage() {
               {endingBalance !== null ? formatCurrency(endingBalance) : 'Enter a starting balance'}
             </span>
           </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {balance.source === 'carryover'
+              ? 'This month started from last month\'s ending balance.'
+              : balance.source === 'saved'
+                ? 'Saved for this month across devices.'
+                : balance.source === 'archive'
+                  ? 'Loaded from this archived month\'s saved balance.'
+                  : 'Set this to begin monthly carry-over.'}
+          </p>
+          {isSavingBalance && <p className="text-xs text-blue-600">Saving balance…</p>}
+          {balanceError && <p className="text-xs text-red-500">{balanceError}</p>}
         </div>
       </div>
 

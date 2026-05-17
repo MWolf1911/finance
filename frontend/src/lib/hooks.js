@@ -5,6 +5,22 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 // ── Transactions ───────────────────────────────────────────
+export function useDashboardBalance(month, year) {
+  const { currentUser } = useAuth();
+  const key = currentUser && month && year ? ['dashboardBalance', month, year] : null;
+
+  const { data, error, isLoading, mutate } = useSWR(key, () =>
+    api.getDashboardBalance(year, month)
+  );
+
+  return {
+    balance: data || { startingBalance: 0, endingBalance: 0, net: 0, source: 'default' },
+    error,
+    isLoading,
+    mutate,
+  };
+}
+
 export function useTransactions(month, year, filters = {}) {
   const { currentUser } = useAuth();
   const key = currentUser

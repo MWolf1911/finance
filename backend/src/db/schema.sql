@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS monthly_archives (
     user_id TEXT NOT NULL,
     year INTEGER NOT NULL,
     month INTEGER NOT NULL,
+    starting_balance REAL NOT NULL DEFAULT 0,
+    ending_balance REAL NOT NULL DEFAULT 0,
     income REAL NOT NULL DEFAULT 0,
     expenses REAL NOT NULL DEFAULT 0,
     net REAL NOT NULL DEFAULT 0,

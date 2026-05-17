@@ -9,6 +9,7 @@
 
 const { getDb } = require('../db/init');
 const ArchiveModel = require('../models/archive');
+const DashboardBalanceModel = require('../models/dashboardBalance');
 
 const METADATA_KEY = 'last_archive_run';
 
@@ -97,10 +98,15 @@ function runArchiveSnapshot() {
           else expenses += tx.amount;
         }
 
+        const { startingBalance } = DashboardBalanceModel.getStartingBalance(curYear, curMonth);
+        const endingBalance = startingBalance + (income - expenses);
+
         ArchiveModel.create({
           userId: user.id,
           year: curYear,
           month: curMonth,
+          startingBalance,
+          endingBalance,
           income,
           expenses,
           net: income - expenses,

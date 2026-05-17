@@ -102,6 +102,20 @@ function initializeDatabase() {
     console.log('Migration complete: debts.archived_at added.');
   }
 
+  const archiveColInfo = db.prepare("PRAGMA table_info(monthly_archives)").all();
+  if (!archiveColInfo.find(c => c.name === 'starting_balance')) {
+    console.log('Migrating monthly_archives: adding starting_balance column...');
+    db.exec(`ALTER TABLE monthly_archives ADD COLUMN starting_balance REAL NOT NULL DEFAULT 0`);
+    console.log('Migration complete: monthly_archives.starting_balance added.');
+  }
+
+  const archiveColInfo2 = db.prepare("PRAGMA table_info(monthly_archives)").all();
+  if (!archiveColInfo2.find(c => c.name === 'ending_balance')) {
+    console.log('Migrating monthly_archives: adding ending_balance column...');
+    db.exec(`ALTER TABLE monthly_archives ADD COLUMN ending_balance REAL NOT NULL DEFAULT 0`);
+    console.log('Migration complete: monthly_archives.ending_balance added.');
+  }
+
   const householdMigration = migrateLegacyUsersToHousehold(db);
   if (householdMigration.migrated) {
     console.log(`Consolidated ${householdMigration.removedUsers} legacy user profile(s) into one shared household ledger.`);
