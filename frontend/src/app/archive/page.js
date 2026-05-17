@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useArchives, useArchiveMonth, useAppSettings } from '@/lib/hooks';
 import { api } from '@/lib/api';
@@ -264,14 +264,35 @@ function buildPrintableArchiveHtml({ archive, month, year, mode = 'detailed', in
 
 export default function ArchivePage() {
   const { currentUser, loading: authLoading } = useAuth();
-  const { archives, isLoading } = useArchives();
+  const { archives, isLoading, mutate: mutateArchives } = useArchives();
   const [expandedYear, setExpandedYear] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [reconciliationFilter, setReconciliationFilter] = useState('all');
+
+  const filteredArchives = useMemo(() => {
+    if (reconciliationFilter === 'reconciled') {
+      return archives.filter((archive) => Boolean(archive.reconciled_at));
+    }
+
+    if (reconciliationFilter === 'unreconciled') {
+      return archives.filter((archive) => !archive.reconciled_at);
+    }
+
+    return archives;
+  }, [archives, reconciliationFilter]);
+
+  const reconciliationSummary = useMemo(() => {
+    const total = archives.length;
+    const reconciled = archives.filter((archive) => Boolean(archive.reconciled_at)).length;
+    const unreconciled = total - reconciled;
+
+    return { total, reconciled, unreconciled };
+  }, [archives]);
 
   // Group archives by year
   const byYear = useMemo(() => {
     const map = {};
-    for (const a of archives) {
+    for (const a of filteredArchives) {
       if (!map[a.year]) map[a.year] = [];
       map[a.year].push(a);
     }
@@ -280,7 +301,7 @@ export default function ArchivePage() {
       map[y].sort((a, b) => a.month - b.month);
     }
     return map;
-  }, [archives]);
+  }, [filteredArchives]);
 
   const years = useMemo(
     () => Object.keys(byYear).map(Number).sort((a, b) => b - a),
@@ -299,7 +320,9 @@ export default function ArchivePage() {
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Archive</h2>
         <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-12 text-center text-gray-400">
-          No archived months yet. Archives are created automatically at the start of each new month.
+          {archives.length === 0
+            ? 'No archived months yet. Archives are created automatically at the start of each new month.'
+            : 'No months match the current reconciliation filter.'}
         </div>
       </div>
     );
@@ -310,6 +333,31 @@ export default function ArchivePage() {
       <div>
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Archive</h2>
         <p className="text-gray-500 dark:text-gray-400">Monthly transaction history</p>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <ArchiveStatusCard label="Archived Months" value={reconciliationSummary.total} tone="slate" />
+          <ArchiveStatusCard label="Reconciled" value={reconciliationSummary.reconciled} tone="green" />
+          <ArchiveStatusCard label="Needs Review" value={reconciliationSummary.unreconciled} tone="amber" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <FilterButton
+            label="All Months"
+            active={reconciliationFilter === 'all'}
+            onClick={() => setReconciliationFilter('all')}
+          />
+          <FilterButton
+            label="Needs Review"
+            active={reconciliationFilter === 'unreconciled'}
+            onClick={() => setReconciliationFilter('unreconciled')}
+          />
+          <FilterButton
+            label="Reconciled"
+            active={reconciliationFilter === 'reconciled'}
+            onClick={() => setReconciliationFilter('reconciled')}
+          />
+        </div>
       </div>
 
       {/* Year cards */}
@@ -332,6 +380,7 @@ export default function ArchivePage() {
         <MonthDetail
           year={selectedMonth.year}
           month={selectedMonth.month}
+          onUpdated={() => mutateArchives()}
           onClose={() => setSelectedMonth(null)}
         />
       )}
@@ -407,6 +456,13 @@ function MonthSummaryRow({ archive, selected, onSelect }) {
           {MONTH_NAMES[month]}
         </span>
         <span className="text-xs text-gray-400">{transaction_count} txn{transaction_count !== 1 ? 's' : ''}</span>
+        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+          archive.reconciled_at
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+        }`}>
+          {archive.reconciled_at ? 'Reconciled' : 'Needs Review'}
+        </span>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex gap-4 text-sm">
@@ -428,9 +484,25 @@ function MonthSummaryRow({ archive, selected, onSelect }) {
   );
 }
 
-function MonthDetail({ year, month, onClose }) {
-  const { archive, isLoading } = useArchiveMonth(year, month);
+function MonthDetail({ year, month, onClose, onUpdated }) {
+  const { archive, isLoading, mutate } = useArchiveMonth(year, month);
   const { settings } = useAppSettings();
+  const [reconciledEndingInput, setReconciledEndingInput] = useState('');
+  const [reconciliationNotesInput, setReconciliationNotesInput] = useState('');
+  const [reconciliationError, setReconciliationError] = useState('');
+  const [isSavingReconciliation, setIsSavingReconciliation] = useState(false);
+
+  useEffect(() => {
+    setReconciledEndingInput(
+      archive?.reconciled_ending_balance === null || archive?.reconciled_ending_balance === undefined
+        ? ''
+        : String(archive.reconciled_ending_balance)
+    );
+  }, [archive?.reconciled_ending_balance, year, month]);
+
+  useEffect(() => {
+    setReconciliationNotesInput(archive?.reconciliation_notes ?? '');
+  }, [archive?.reconciliation_notes, year, month]);
 
   function handleDownload() {
     const url = api.getArchiveCsvUrl(year, month);
@@ -452,6 +524,35 @@ function MonthDetail({ year, month, onClose }) {
     }));
     win.document.close();
     win.print();
+  }
+
+  async function handleSaveReconciliation() {
+    const parsed = parseFloat(reconciledEndingInput);
+    const normalizedNotes = reconciliationNotesInput.trim() || null;
+    if (!Number.isFinite(parsed)) {
+      setReconciliationError('Enter a valid actual ending balance');
+      return;
+    }
+
+    setIsSavingReconciliation(true);
+    setReconciliationError('');
+    try {
+      const updated = await api.updateDashboardReconciliation(year, month, {
+        actualEndingBalance: parsed,
+        reconciliationNotes: normalizedNotes,
+      });
+      await mutate({
+        ...archive,
+        reconciled_ending_balance: updated.actualEndingBalance,
+        reconciliation_notes: updated.reconciliationNotes,
+        reconciled_at: updated.reconciledAt,
+      }, false);
+      onUpdated?.();
+    } catch (err) {
+      setReconciliationError(err.message || 'Failed to save reconciliation');
+    } finally {
+      setIsSavingReconciliation(false);
+    }
   }
 
   return (
@@ -492,6 +593,88 @@ function MonthDetail({ year, month, onClose }) {
         <div className="text-center py-12 text-gray-400">Archive not found.</div>
       ) : (
         <div>
+          <div className="px-6 py-4 border-b dark:border-gray-700 bg-emerald-50/40 dark:bg-emerald-900/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Monthly Reconciliation</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {archive.reconciled_at
+                    ? `Reconciled ${new Date(archive.reconciled_at).toLocaleString()}`
+                    : 'Save the actual ending balance for this archived month.'}
+                </p>
+              </div>
+              {archive.reconciled_at && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-medium">
+                  Reconciled
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Projected End</p>
+                <p className="font-semibold text-gray-800 dark:text-gray-100">{formatCurrency(archive.ending_balance ?? archive.net ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Actual End</p>
+                <p className="font-semibold text-gray-800 dark:text-gray-100">
+                  {archive.reconciled_ending_balance === null || archive.reconciled_ending_balance === undefined
+                    ? 'Not saved'
+                    : formatCurrency(archive.reconciled_ending_balance)}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Variance</p>
+                <p className={`font-semibold ${
+                  archive.reconciled_ending_balance === null || archive.reconciled_ending_balance === undefined
+                    ? 'text-gray-800 dark:text-gray-100'
+                    : archive.reconciled_ending_balance - (archive.ending_balance ?? 0) >= 0
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                }`}>
+                  {archive.reconciled_ending_balance === null || archive.reconciled_ending_balance === undefined
+                    ? 'Not reconciled'
+                    : formatCurrency(archive.reconciled_ending_balance - (archive.ending_balance ?? 0))}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="0.01"
+                value={reconciledEndingInput}
+                onChange={(e) => setReconciledEndingInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveReconciliation();
+                  }
+                }}
+                placeholder="Actual ending balance"
+                className="w-full max-w-sm px-3 py-2 border dark:border-gray-600 rounded-lg focus:border-emerald-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
+              />
+              <button
+                onClick={handleSaveReconciliation}
+                disabled={isSavingReconciliation}
+                className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Reconciliation Notes</label>
+              <textarea
+                value={reconciliationNotesInput}
+                onChange={(e) => setReconciliationNotesInput(e.target.value)}
+                onBlur={handleSaveReconciliation}
+                rows={3}
+                placeholder="Optional note about any variance or cleared adjustments"
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:border-emerald-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 resize-y"
+              />
+            </div>
+            {isSavingReconciliation && <p className="text-xs text-blue-600">Saving reconciliation…</p>}
+            {reconciliationError && <p className="text-xs text-red-500">{reconciliationError}</p>}
+          </div>
+
           {/* Summary bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-6 py-4 border-b dark:border-gray-700">
             <SummaryCell label="Income" value={archive.income} className="text-green-600" prefix="+" />
@@ -548,6 +731,37 @@ function MonthDetail({ year, month, onClose }) {
         </div>
       )}
     </div>
+  );
+}
+
+function ArchiveStatusCard({ label, value, tone }) {
+  const toneClasses = {
+    slate: 'bg-slate-50 text-slate-700 dark:bg-slate-900/20 dark:text-slate-200',
+    green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+    amber: 'bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300',
+  };
+
+  return (
+    <div className={`rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 ${toneClasses[tone] || toneClasses.slate}`}>
+      <p className="text-xs uppercase tracking-wide opacity-80">{label}</p>
+      <p className="text-2xl font-semibold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function FilterButton({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+        active
+          ? 'bg-blue-600 text-white'
+          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

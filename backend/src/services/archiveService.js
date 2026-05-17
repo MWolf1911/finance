@@ -100,6 +100,7 @@ function runArchiveSnapshot() {
 
         const { startingBalance } = DashboardBalanceModel.getStartingBalance(curYear, curMonth);
         const endingBalance = startingBalance + (income - expenses);
+        const monthBalance = DashboardBalanceModel.getMonthBalance(curYear, curMonth, income - expenses);
 
         ArchiveModel.create({
           userId: user.id,
@@ -107,6 +108,9 @@ function runArchiveSnapshot() {
           month: curMonth,
           startingBalance,
           endingBalance,
+          reconciledEndingBalance: monthBalance.actualEndingBalance,
+          reconciliationNotes: monthBalance.reconciliationNotes,
+          reconciledAt: monthBalance.reconciledAt,
           income,
           expenses,
           net: income - expenses,

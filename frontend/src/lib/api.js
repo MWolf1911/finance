@@ -32,6 +32,10 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  updateDashboardReconciliation: (year, month, data) => apiFetch(`/dashboard/reconciliation?year=${year}&month=${month}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
 
   // Transactions
   getTransactions: (params = {}) => {

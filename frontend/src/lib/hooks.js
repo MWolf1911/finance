@@ -14,7 +14,17 @@ export function useDashboardBalance(month, year) {
   );
 
   return {
-    balance: data || { startingBalance: 0, endingBalance: 0, net: 0, source: 'default' },
+    balance: data || {
+      startingBalance: 0,
+      projectedEndingBalance: 0,
+      actualEndingBalance: null,
+      variance: null,
+      net: 0,
+      source: 'default',
+      isReconciled: false,
+      reconciledAt: null,
+      reconciliationNotes: null,
+    },
     error,
     isLoading,
     mutate,
@@ -164,9 +174,9 @@ export function useArchiveMonth(year, month) {
     ? ['archiveMonth', year, month]
     : null;
 
-  const { data, error, isLoading } = useSWR(key, () =>
+  const { data, error, isLoading, mutate } = useSWR(key, () =>
     api.getArchiveMonth(year, month)
   );
 
-  return { archive: data, error, isLoading };
+  return { archive: data, error, isLoading, mutate };
 }

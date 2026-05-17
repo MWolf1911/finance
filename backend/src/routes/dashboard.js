@@ -24,18 +24,8 @@ router.get('/balance', (req, res) => {
   }
 
   const { year, month } = parsed;
-  const { startingBalance, source } = DashboardBalanceModel.getStartingBalance(year, month);
   const summary = TransactionModel.getMonthlySummary(null, year, month);
-  const endingBalance = startingBalance + (summary.net || 0);
-
-  res.json({
-    year,
-    month,
-    source,
-    startingBalance,
-    endingBalance,
-    net: summary.net || 0,
-  });
+  res.json(DashboardBalanceModel.getMonthBalance(year, month, summary.net || 0));
 });
 
 // PUT /api/dashboard/balance?year=&month=
@@ -51,17 +41,30 @@ router.put('/balance', (req, res) => {
   }
 
   const { year, month } = parsed;
-  const saved = DashboardBalanceModel.setStartingBalance(year, month, startingBalance);
   const summary = TransactionModel.getMonthlySummary(null, year, month);
+  DashboardBalanceModel.setStartingBalance(year, month, startingBalance);
+  res.json(DashboardBalanceModel.getMonthBalance(year, month, summary.net || 0));
+});
 
-  res.json({
-    year,
-    month,
-    source: 'saved',
-    startingBalance: saved,
-    endingBalance: saved + (summary.net || 0),
-    net: summary.net || 0,
+// PUT /api/dashboard/reconciliation?year=&month=
+router.put('/reconciliation', (req, res) => {
+  const parsed = parseMonthYear(req, res);
+  if (!parsed) {
+    return;
+  }
+
+  const { actualEndingBalance, reconciliationNotes } = req.body || {};
+  if (typeof actualEndingBalance !== 'number' || Number.isNaN(actualEndingBalance)) {
+    return res.status(400).json({ error: 'actualEndingBalance must be a valid number' });
+  }
+
+  const { year, month } = parsed;
+  const summary = TransactionModel.getMonthlySummary(null, year, month);
+  DashboardBalanceModel.reconcileMonth(year, month, {
+    actualEndingBalance,
+    reconciliationNotes,
   });
+  res.json(DashboardBalanceModel.getMonthBalance(year, month, summary.net || 0));
 });
 
 module.exports = router;

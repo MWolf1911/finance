@@ -18,8 +18,12 @@ export default function DashboardPage() {
   const { settings } = useAppSettings();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [startingBalanceInput, setStartingBalanceInput] = useState('0');
+  const [reconciledEndingInput, setReconciledEndingInput] = useState('');
+  const [reconciliationNotesInput, setReconciliationNotesInput] = useState('');
   const [balanceError, setBalanceError] = useState('');
+  const [reconciliationError, setReconciliationError] = useState('');
   const [isSavingBalance, setIsSavingBalance] = useState(false);
+  const [isSavingReconciliation, setIsSavingReconciliation] = useState(false);
 
   const refreshIntervalSeconds = settings.liveRefresh?.intervalSeconds ?? 10;
   const refreshStatus = useAutoRefresh([mutateSummary, mutateTransactions, mutateBalance], refreshIntervalSeconds * 1000);
@@ -27,6 +31,18 @@ export default function DashboardPage() {
   useEffect(() => {
     setStartingBalanceInput(String(balance.startingBalance ?? 0));
   }, [balance.startingBalance, month, year]);
+
+  useEffect(() => {
+    setReconciledEndingInput(
+      balance.actualEndingBalance === null || balance.actualEndingBalance === undefined
+        ? ''
+        : String(balance.actualEndingBalance)
+    );
+  }, [balance.actualEndingBalance, month, year]);
+
+  useEffect(() => {
+    setReconciliationNotesInput(balance.reconciliationNotes ?? '');
+  }, [balance.reconciliationNotes, month, year]);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
@@ -37,6 +53,12 @@ export default function DashboardPage() {
   const endingBalance = hasStartingBalance
     ? parsedStartingBalance + ((summary?.income ?? 0) - (summary?.expenses ?? 0))
     : null;
+  const parsedReconciledEnding = parseFloat(reconciledEndingInput);
+  const hasReconciledEnding = Number.isFinite(parsedReconciledEnding);
+  const normalizedReconciliationNotes = reconciliationNotesInput.trim() || null;
+  const reconciliationVariance = hasReconciledEnding && endingBalance !== null
+    ? parsedReconciledEnding - endingBalance
+    : balance.variance;
 
   async function saveStartingBalance() {
     if (!Number.isFinite(parsedStartingBalance)) {
@@ -64,9 +86,39 @@ export default function DashboardPage() {
     }
   }
 
+  async function saveReconciliation() {
+    if (!hasReconciledEnding) {
+      setReconciliationError('Enter the actual ending balance before saving reconciliation');
+      return;
+    }
+
+    const noteUnchanged = normalizedReconciliationNotes === (balance.reconciliationNotes ?? null);
+    const endingUnchanged = balance.actualEndingBalance !== null
+      && Math.abs(parsedReconciledEnding - balance.actualEndingBalance) < 0.005;
+
+    if (endingUnchanged && noteUnchanged) {
+      return;
+    }
+
+    setIsSavingReconciliation(true);
+    setReconciliationError('');
+    try {
+      const updated = await api.updateDashboardReconciliation(year, month, {
+        actualEndingBalance: parsedReconciledEnding,
+        reconciliationNotes: normalizedReconciliationNotes,
+      });
+      await mutateBalance(updated, false);
+    } catch (err) {
+      setReconciliationError(err.message || 'Failed to save reconciliation');
+    } finally {
+      setIsSavingReconciliation(false);
+    }
+  }
+
   function handleSaved() {
     mutateSummary();
     mutateTransactions();
+    mutateBalance();
   }
 
   return (
@@ -138,6 +190,70 @@ export default function DashboardPage() {
           </p>
           {isSavingBalance && <p className="text-xs text-blue-600">Saving balance…</p>}
           {balanceError && <p className="text-xs text-red-500">{balanceError}</p>}
+          <div className="border-t border-gray-200 pt-3 dark:border-gray-700 space-y-2">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Reconciled Ending Balance</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {balance.reconciledAt
+                  ? `Reconciled ${new Date(balance.reconciledAt).toLocaleString()}`
+                  : 'Save the actual end-of-month balance when you verify it.'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="0.01"
+                value={reconciledEndingInput}
+                onChange={(e) => setReconciledEndingInput(e.target.value)}
+                onBlur={saveReconciliation}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveReconciliation();
+                  }
+                }}
+                placeholder="Actual month end"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              />
+              <button
+                type="button"
+                onClick={saveReconciliation}
+                disabled={isSavingReconciliation}
+                className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Reconciliation Notes</label>
+              <textarea
+                value={reconciliationNotesInput}
+                onChange={(e) => setReconciliationNotesInput(e.target.value)}
+                rows={3}
+                placeholder="Optional note about any variance or manual adjustments"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 resize-y"
+              />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Variance:{' '}
+              <span className={`font-semibold ${
+                reconciliationVariance === null || Math.abs(reconciliationVariance) < 0.005
+                  ? 'text-gray-700 dark:text-gray-200'
+                  : reconciliationVariance > 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+              }`}>
+                {reconciliationVariance === null ? 'Not reconciled' : formatCurrency(reconciliationVariance)}
+              </span>
+            </p>
+            {balance.reconciliationNotes && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Saved note: <span className="text-gray-700 dark:text-gray-200">{balance.reconciliationNotes}</span>
+              </p>
+            )}
+            {isSavingReconciliation && <p className="text-xs text-blue-600">Saving reconciliation…</p>}
+            {reconciliationError && <p className="text-xs text-red-500">{reconciliationError}</p>}
+          </div>
         </div>
       </div>
 

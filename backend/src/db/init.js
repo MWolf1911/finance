@@ -116,6 +116,27 @@ function initializeDatabase() {
     console.log('Migration complete: monthly_archives.ending_balance added.');
   }
 
+  const archiveColInfo3 = db.prepare("PRAGMA table_info(monthly_archives)").all();
+  if (!archiveColInfo3.find(c => c.name === 'reconciled_ending_balance')) {
+    console.log('Migrating monthly_archives: adding reconciled_ending_balance column...');
+    db.exec(`ALTER TABLE monthly_archives ADD COLUMN reconciled_ending_balance REAL`);
+    console.log('Migration complete: monthly_archives.reconciled_ending_balance added.');
+  }
+
+  const archiveColInfo4 = db.prepare("PRAGMA table_info(monthly_archives)").all();
+  if (!archiveColInfo4.find(c => c.name === 'reconciliation_notes')) {
+    console.log('Migrating monthly_archives: adding reconciliation_notes column...');
+    db.exec(`ALTER TABLE monthly_archives ADD COLUMN reconciliation_notes TEXT`);
+    console.log('Migration complete: monthly_archives.reconciliation_notes added.');
+  }
+
+  const archiveColInfo5 = db.prepare("PRAGMA table_info(monthly_archives)").all();
+  if (!archiveColInfo5.find(c => c.name === 'reconciled_at')) {
+    console.log('Migrating monthly_archives: adding reconciled_at column...');
+    db.exec(`ALTER TABLE monthly_archives ADD COLUMN reconciled_at TEXT`);
+    console.log('Migration complete: monthly_archives.reconciled_at added.');
+  }
+
   const householdMigration = migrateLegacyUsersToHousehold(db);
   if (householdMigration.migrated) {
     console.log(`Consolidated ${householdMigration.removedUsers} legacy user profile(s) into one shared household ledger.`);
