@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useTransactions, useMonthlySummary, useTemplates } from '@/lib/hooks';
+import { useTransactions, useMonthlySummary, useTemplates, useCategories } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib/constants';
 import TransactionModal from '@/components/TransactionModal';
@@ -13,6 +13,7 @@ export default function TransactionsPage() {
   const { transactions, isLoading, mutate } = useTransactions(month, year);
   const { mutate: mutateSummary } = useMonthlySummary(month, year);
   const { templates, mutate: mutateTemplates } = useTemplates();
+  const { categories } = useCategories();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -71,7 +72,14 @@ export default function TransactionsPage() {
     mutateTemplates();
   }
 
-  const allCategories = [...new Set(transactions.map((t) => t.category))].sort();
+  const expenseCategories = useMemo(
+    () => [...(categories.Expense || [])].sort((a, b) => a.localeCompare(b)),
+    [categories]
+  );
+  const incomeCategories = useMemo(
+    () => [...(categories.Income || [])].sort((a, b) => a.localeCompare(b)),
+    [categories]
+  );
 
   return (
     <div className="space-y-6">
@@ -114,9 +122,20 @@ export default function TransactionsPage() {
             className="px-3 py-2 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none text-sm bg-white dark:bg-gray-700 dark:text-gray-200"
           >
             <option value="">All Categories</option>
-            {allCategories.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {expenseCategories.length > 0 && (
+              <optgroup label="Expense">
+                {expenseCategories.map((c) => (
+                  <option key={`expense-${c}`} value={c}>{c}</option>
+                ))}
+              </optgroup>
+            )}
+            {incomeCategories.length > 0 && (
+              <optgroup label="Income">
+                {incomeCategories.map((c) => (
+                  <option key={`income-${c}`} value={c}>{c}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
           {(filterType || filterCategory || search) && (
             <button
