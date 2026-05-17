@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib/constants';
 import { useAutoRefresh } from '@/lib/useAutoRefresh';
 import { usePersistentState } from '@/lib/usePersistentState';
+import AutoRefreshIndicator from '@/components/AutoRefreshIndicator';
 import TransactionModal from '@/components/TransactionModal';
 
 const DEFAULT_SORT = { key: 'date', dir: 'desc' };
@@ -67,7 +68,8 @@ export default function TransactionsPage() {
     [categories]
   );
 
-  useAutoRefresh([mutate, mutateTemplates]);
+  const refreshIntervalSeconds = settings.liveRefresh?.intervalSeconds ?? 10;
+  const refreshStatus = useAutoRefresh([mutate, mutateTemplates], refreshIntervalSeconds * 1000);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
@@ -98,6 +100,13 @@ export default function TransactionsPage() {
         <div>
           <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Transactions</h2>
           <p className="text-gray-500 dark:text-gray-400">{getMonthName(month, year)}</p>
+          <div className="mt-2">
+            <AutoRefreshIndicator
+              intervalSeconds={refreshIntervalSeconds}
+              isRefreshing={refreshStatus.isRefreshing}
+              lastRefreshedAt={refreshStatus.lastRefreshedAt}
+            />
+          </div>
         </div>
         <button
           onClick={() => setAddOpen(true)}

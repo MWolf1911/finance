@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useDebts, useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
+import { useAppSettings, useDebts, useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDebtLabel, getCurrentMonth, todayISO } from '@/lib/constants';
 import { useAutoRefresh } from '@/lib/useAutoRefresh';
 import { usePersistentState } from '@/lib/usePersistentState';
+import AutoRefreshIndicator from '@/components/AutoRefreshIndicator';
 import Modal from '@/components/Modal';
 
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
@@ -19,6 +20,7 @@ export default function DebtsPage() {
   const { month, year } = getCurrentMonth();
   const { mutate: mutateSummary } = useMonthlySummary(month, year);
   const { mutate: mutateTransactions } = useTransactions(month, year);
+  const { settings } = useAppSettings();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editDebt, setEditDebt] = useState(null);
@@ -32,7 +34,8 @@ export default function DebtsPage() {
     [debts]
   );
 
-  useAutoRefresh([mutate, mutateTotal]);
+  const refreshIntervalSeconds = settings.liveRefresh?.intervalSeconds ?? 10;
+  const refreshStatus = useAutoRefresh([mutate, mutateTotal], refreshIntervalSeconds * 1000);
 
   const archivedDebts = useMemo(
     () => debts.filter((d) => Boolean(d.archived_at)),
@@ -89,6 +92,13 @@ export default function DebtsPage() {
           <p className="text-gray-500 dark:text-gray-400">
             Total outstanding: <span className="font-semibold text-red-600">{formatCurrency(total)}</span>
           </p>
+          <div className="mt-2">
+            <AutoRefreshIndicator
+              intervalSeconds={refreshIntervalSeconds}
+              isRefreshing={refreshStatus.isRefreshing}
+              lastRefreshedAt={refreshStatus.lastRefreshedAt}
+            />
+          </div>
         </div>
         <button
           onClick={() => setAddOpen(true)}

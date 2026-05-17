@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useDashboardBalance, useMonthlySummary, useTransactions } from '@/lib/hooks';
+import { useAppSettings, useDashboardBalance, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, getCurrentMonth, getMonthName, formatDate } from '@/lib/constants';
 import { useAutoRefresh } from '@/lib/useAutoRefresh';
+import AutoRefreshIndicator from '@/components/AutoRefreshIndicator';
 import TransactionModal from '@/components/TransactionModal';
 
 export default function DashboardPage() {
@@ -14,12 +15,14 @@ export default function DashboardPage() {
   const { summary, mutate: mutateSummary } = useMonthlySummary(month, year);
   const { transactions, mutate: mutateTransactions } = useTransactions(month, year);
   const { balance, mutate: mutateBalance } = useDashboardBalance(month, year);
+  const { settings } = useAppSettings();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [startingBalanceInput, setStartingBalanceInput] = useState('0');
   const [balanceError, setBalanceError] = useState('');
   const [isSavingBalance, setIsSavingBalance] = useState(false);
 
-  useAutoRefresh([mutateSummary, mutateTransactions, mutateBalance]);
+  const refreshIntervalSeconds = settings.liveRefresh?.intervalSeconds ?? 10;
+  const refreshStatus = useAutoRefresh([mutateSummary, mutateTransactions, mutateBalance], refreshIntervalSeconds * 1000);
 
   useEffect(() => {
     setStartingBalanceInput(String(balance.startingBalance ?? 0));
@@ -73,6 +76,13 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Dashboard</h2>
           <p className="text-gray-500 dark:text-gray-400">{getMonthName(month, year)}</p>
+          <div className="mt-2">
+            <AutoRefreshIndicator
+              intervalSeconds={refreshIntervalSeconds}
+              isRefreshing={refreshStatus.isRefreshing}
+              lastRefreshedAt={refreshStatus.lastRefreshedAt}
+            />
+          </div>
         </div>
         <button
           onClick={() => setQuickAddOpen(true)}

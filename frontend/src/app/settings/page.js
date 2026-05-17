@@ -20,6 +20,9 @@ const DEFAULT_APP_SETTINGS = {
     mode: 'detailed',
     includeDescriptions: true,
   },
+  liveRefresh: {
+    intervalSeconds: 10,
+  },
 };
 
 export default function SettingsPage() {
@@ -60,6 +63,11 @@ export default function SettingsPage() {
         archivePrint: {
           mode: settings.archivePrint?.mode === 'compact' ? 'compact' : 'detailed',
           includeDescriptions: settings.archivePrint?.includeDescriptions !== false,
+        },
+        liveRefresh: {
+          intervalSeconds: [0, 5, 10, 30, 60].includes(settings.liveRefresh?.intervalSeconds)
+            ? settings.liveRefresh.intervalSeconds
+            : 10,
         },
       });
     }
@@ -107,6 +115,10 @@ export default function SettingsPage() {
       archivePrint: {
         ...settingsDraft.archivePrint,
         ...(nextPartial.archivePrint || {}),
+      },
+      liveRefresh: {
+        ...settingsDraft.liveRefresh,
+        ...(nextPartial.liveRefresh || {}),
       },
     };
     setSettingsDraft(next);
@@ -250,6 +262,25 @@ export default function SettingsPage() {
             <option value="detailed">Detailed</option>
             <option value="compact">Compact</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Auto-refresh interval</label>
+          <select
+            value={settingsDraft.liveRefresh.intervalSeconds}
+            onChange={(e) => updateSettingsDraft({ liveRefresh: { intervalSeconds: parseInt(e.target.value, 10) } })}
+            disabled={savingSettings}
+            className="w-full max-w-sm px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 disabled:opacity-50"
+          >
+            <option value="0">Off</option>
+            <option value="5">Every 5 seconds</option>
+            <option value="10">Every 10 seconds</option>
+            <option value="30">Every 30 seconds</option>
+            <option value="60">Every minute</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Controls how often live pages check for changes made by another user.
+          </p>
         </div>
       </div>
 

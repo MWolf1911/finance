@@ -136,6 +136,9 @@ export function useAppSettings() {
         mode: 'detailed',
         includeDescriptions: true,
       },
+      liveRefresh: {
+        intervalSeconds: 10,
+      },
     },
     error,
     isLoading,

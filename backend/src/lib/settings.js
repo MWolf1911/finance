@@ -16,12 +16,26 @@ const DEFAULT_SETTINGS = {
     mode: 'detailed',
     includeDescriptions: true,
   },
+  liveRefresh: {
+    intervalSeconds: 10,
+  },
 };
+
+const ALLOWED_REFRESH_INTERVALS = new Set([0, 5, 10, 30, 60]);
+
+function normalizeRefreshIntervalSeconds(value) {
+  const parsed = parseInt(value, 10);
+  if (ALLOWED_REFRESH_INTERVALS.has(parsed)) {
+    return parsed;
+  }
+  return DEFAULT_SETTINGS.liveRefresh.intervalSeconds;
+}
 
 function normalizeSettings(input = {}) {
   const tx = input.transactionDefaults || {};
   const debt = input.debt || {};
   const archivePrint = input.archivePrint || {};
+  const liveRefresh = input.liveRefresh || {};
 
   return {
     transactionDefaults: {
@@ -39,6 +53,9 @@ function normalizeSettings(input = {}) {
         ? Boolean(archivePrint.includeDescriptions)
         : true,
     },
+    liveRefresh: {
+      intervalSeconds: normalizeRefreshIntervalSeconds(liveRefresh.intervalSeconds),
+    },
   };
 }
 
@@ -55,6 +72,10 @@ function mergeWithDefaults(input = {}) {
     archivePrint: {
       ...DEFAULT_SETTINGS.archivePrint,
       ...(input.archivePrint || {}),
+    },
+    liveRefresh: {
+      ...DEFAULT_SETTINGS.liveRefresh,
+      ...(input.liveRefresh || {}),
     },
   });
 }
@@ -89,6 +110,10 @@ function setSettings(settings) {
     archivePrint: {
       ...current.archivePrint,
       ...((settings && settings.archivePrint) || {}),
+    },
+    liveRefresh: {
+      ...current.liveRefresh,
+      ...((settings && settings.liveRefresh) || {}),
     },
   });
   SystemMetadataModel.set(SETTINGS_KEY, JSON.stringify(normalized));
