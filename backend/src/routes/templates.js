@@ -62,27 +62,61 @@ router.post('/', (req, res) => {
 
 // PUT /api/templates/:id
 router.put('/:id', (req, res) => {
-  const { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description } = req.body;
+  const { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description } = req.body || {};
 
-  if (recurrence !== undefined) {
-    const validRecurrences = ['weekly', 'biweekly', 'monthly'];
-    if (!validRecurrences.includes(recurrence)) {
-      return res.status(400).json({ error: 'recurrence must be weekly, biweekly, or monthly' });
+  const existing = RecurringTemplateModel.getById(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Template not found' });
+  }
+
+  const hasDayOfMonth = Object.prototype.hasOwnProperty.call(req.body || {}, 'dayOfMonth');
+  const hasStartDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'startDate');
+  const hasEndDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'endDate');
+  const hasDescription = Object.prototype.hasOwnProperty.call(req.body || {}, 'description');
+
+  const nextRecurrence = recurrence ?? existing.recurrence;
+  const nextDayOfMonth = hasDayOfMonth ? dayOfMonth : existing.day_of_month;
+  const nextStartDate = hasStartDate ? startDate : existing.start_date;
+  const nextEndDate = hasEndDate ? endDate : existing.end_date;
+  const nextAmount = amount ?? existing.amount;
+
+  const validRecurrences = ['weekly', 'biweekly', 'monthly'];
+  if (!validRecurrences.includes(nextRecurrence)) {
+    return res.status(400).json({ error: 'recurrence must be weekly, biweekly, or monthly' });
+  }
+
+  if (nextRecurrence === 'monthly') {
+    if (typeof nextDayOfMonth !== 'number' || nextDayOfMonth < 1 || nextDayOfMonth > 31) {
+      return res.status(400).json({ error: 'dayOfMonth (1-31) is required for monthly recurrence' });
     }
+  } else if (!nextStartDate) {
+    return res.status(400).json({ error: 'startDate is required for weekly/biweekly recurrence' });
   }
 
-  if (dayOfMonth !== undefined && dayOfMonth !== null && (typeof dayOfMonth !== 'number' || dayOfMonth < 1 || dayOfMonth > 31)) {
-    return res.status(400).json({ error: 'dayOfMonth must be between 1 and 31' });
-  }
-
-  if (amount !== undefined && (typeof amount !== 'number' || amount <= 0)) {
+  if (typeof nextAmount !== 'number' || nextAmount <= 0) {
     return res.status(400).json({ error: 'amount must be a positive number' });
   }
 
-  const updated = RecurringTemplateModel.update(req.params.id, { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description });
-  if (!updated) {
-    return res.status(404).json({ error: 'Template not found' });
+  if (nextEndDate && nextStartDate && nextEndDate < nextStartDate) {
+    return res.status(400).json({ error: 'End date must be on or after start date' });
   }
+
+  const updated = RecurringTemplateModel.update(req.params.id, {
+    type,
+    recurrence,
+    dayOfMonth: nextRecurrence === 'monthly' ? nextDayOfMonth : null,
+    startDate: nextRecurrence === 'monthly' ? null : nextStartDate,
+    endDate: hasEndDate ? (nextEndDate || null) : existing.end_date,
+    category,
+    amount,
+    description: hasDescription ? (description || null) : existing.description,
+  });
+
+  if (!updated) {
+    return res.status(500).json({ error: 'Failed to update template' });
+  }
+
+  runLazyGeneration({ force: true });
   res.json({ success: true });
 });
 

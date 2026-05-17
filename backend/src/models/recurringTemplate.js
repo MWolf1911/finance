@@ -52,19 +52,65 @@ const RecurringTemplateModel = {
   update(id, { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description, debtId }) {
     const db = getDb();
     try {
+      const fields = [];
+      const values = [];
+
+      if (type !== undefined) {
+        fields.push('type = ?');
+        values.push(type);
+      }
+
+      if (recurrence !== undefined) {
+        fields.push('recurrence = ?');
+        values.push(recurrence);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(arguments[1], 'dayOfMonth')) {
+        fields.push('day_of_month = ?');
+        values.push(dayOfMonth ?? null);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(arguments[1], 'startDate')) {
+        fields.push('start_date = ?');
+        values.push(startDate ?? null);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(arguments[1], 'endDate')) {
+        fields.push('end_date = ?');
+        values.push(endDate ?? null);
+      }
+
+      if (category !== undefined) {
+        fields.push('category = ?');
+        values.push(category);
+      }
+
+      if (amount !== undefined) {
+        fields.push('amount = ?');
+        values.push(amount);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(arguments[1], 'description')) {
+        fields.push('description = ?');
+        values.push(description ?? null);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(arguments[1], 'debtId')) {
+        fields.push('debt_id = ?');
+        values.push(debtId ?? null);
+      }
+
+      if (fields.length === 0) {
+        return false;
+      }
+
+      values.push(id);
+
       const result = db.prepare(`
         UPDATE recurring_templates
-        SET type = COALESCE(?, type),
-            recurrence = COALESCE(?, recurrence),
-            day_of_month = ?,
-            start_date = ?,
-            end_date = ?,
-            category = COALESCE(?, category),
-            amount = COALESCE(?, amount),
-            description = COALESCE(?, description),
-            debt_id = ?
+        SET ${fields.join(', ')}
         WHERE id = ?
-      `).run(type, recurrence, dayOfMonth ?? null, startDate ?? null, endDate ?? null, category, amount, description, debtId ?? null, id);
+      `).run(...values);
       return result.changes > 0;
     } finally {
       db.close();

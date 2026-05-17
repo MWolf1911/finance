@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib
 import { useAutoRefresh } from '@/lib/useAutoRefresh';
 import { usePersistentState } from '@/lib/usePersistentState';
 import AutoRefreshIndicator from '@/components/AutoRefreshIndicator';
+import RecurringRuleModal from '@/components/RecurringRuleModal';
 import TransactionModal from '@/components/TransactionModal';
 
 const DEFAULT_SORT = { key: 'date', dir: 'desc' };
@@ -24,6 +25,7 @@ export default function TransactionsPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editData, setEditData] = useState(null);
+  const [editingTemplate, setEditingTemplate] = useState(null);
   const [filterType, setFilterType] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [search, setSearch] = useState('');
@@ -102,6 +104,13 @@ export default function TransactionsPage() {
     mutateSummary();
     mutateTemplates();
     setEditData(null);
+  }
+
+  function handleTemplateSaved() {
+    mutate();
+    mutateSummary();
+    mutateTemplates();
+    setEditingTemplate(null);
   }
 
   async function handleDelete(id) {
@@ -353,6 +362,13 @@ export default function TransactionsPage() {
                   <span className={`font-mono font-medium ${tpl.type === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(tpl.amount)}
                   </span>
+                  <button
+                    onClick={() => setEditingTemplate(tpl)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                    title="Edit recurring rule"
+                  >
+                    ✏️
+                  </button>
                   <button onClick={() => handleDeleteTemplate(tpl.id)}
                     className="p-1.5 text-gray-400 hover:text-red-600 transition-colors" title="Delete recurring rule">
                     🗑️
@@ -378,6 +394,15 @@ export default function TransactionsPage() {
           onClose={() => setEditData(null)}
           onSaved={handleSaved}
           editData={editData}
+        />
+      )}
+
+      {editingTemplate && (
+        <RecurringRuleModal
+          open={true}
+          onClose={() => setEditingTemplate(null)}
+          onSaved={handleTemplateSaved}
+          template={editingTemplate}
         />
       )}
     </div>
