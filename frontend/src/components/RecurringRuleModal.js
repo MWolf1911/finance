@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
-import { useCategories } from '@/lib/hooks';
+import { useCategories, useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { DEFAULT_CATEGORIES, todayISO } from '@/lib/constants';
+import { DEFAULT_CATEGORIES, formatDebtLabel, todayISO } from '@/lib/constants';
 
 function getInitialFormState(template) {
+  const isDebtPayment = template?.category === 'Debt Payment' || Boolean(template?.debt_id);
+
   return {
-    type: template?.type === 'Income' ? 'Income' : 'Expense',
-    category: template?.category || '',
+    type: isDebtPayment ? 'Expense' : template?.type === 'Income' ? 'Income' : 'Expense',
+    category: isDebtPayment ? 'Debt Payment' : template?.category || '',
     amount: template?.amount?.toString() || '',
     description: template?.description || '',
+    debtId: template?.debt_id || '',
+    isDebtPayment,
     recurrence: template?.recurrence || 'monthly',
     dayOfMonth: template?.day_of_month?.toString() || '1',
     startDate: template?.start_date || todayISO(),
@@ -21,12 +25,15 @@ function getInitialFormState(template) {
 
 export default function RecurringRuleModal({ open, onClose, onSaved, template }) {
   const { categories } = useCategories();
+  const { debts } = useDebts(true);
   const initialState = getInitialFormState(template);
 
   const [type, setType] = useState(initialState.type);
   const [category, setCategory] = useState(initialState.category);
   const [amount, setAmount] = useState(initialState.amount);
   const [description, setDescription] = useState(initialState.description);
+  const [debtId, setDebtId] = useState(initialState.debtId);
+  const [isDebtPayment, setIsDebtPayment] = useState(initialState.isDebtPayment);
   const [recurrence, setRecurrence] = useState(initialState.recurrence);
   const [dayOfMonth, setDayOfMonth] = useState(initialState.dayOfMonth);
   const [startDate, setStartDate] = useState(initialState.startDate);
@@ -44,6 +51,8 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
     setCategory(nextState.category);
     setAmount(nextState.amount);
     setDescription(nextState.description);
+    setDebtId(nextState.debtId);
+    setIsDebtPayment(nextState.isDebtPayment);
     setRecurrence(nextState.recurrence);
     setDayOfMonth(nextState.dayOfMonth);
     setStartDate(nextState.startDate);
@@ -57,6 +66,9 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
   }
 
   const availableCategories = categories[type]?.length ? categories[type] : DEFAULT_CATEGORIES[type];
+  const selectedDebt = isDebtPayment ? debts.find((debt) => debt.id === debtId) : null;
+  const normalizedType = isDebtPayment ? 'Expense' : type;
+  const normalizedCategory = isDebtPayment ? 'Debt Payment' : category;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -68,8 +80,13 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
       return;
     }
 
-    if (!category) {
+    if (!normalizedCategory) {
       setError('Select a category');
+      return;
+    }
+
+    if (isDebtPayment && !debtId) {
+      setError('Select which debt this rule should pay');
       return;
     }
 
@@ -93,10 +110,11 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
     setLoading(true);
     try {
       await api.updateTemplate(template.id, {
-        type,
-        category,
+        type: normalizedType,
+        category: normalizedCategory,
         amount: parsedAmount,
         description: description.trim() || null,
+        debtId: isDebtPayment ? debtId : null,
         recurrence,
         dayOfMonth: recurrence === 'monthly' ? parsedDayOfMonth : null,
         startDate: recurrence === 'monthly' ? null : startDate,
@@ -121,14 +139,27 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
               type="button"
               onClick={() => {
                 setType(value);
+                if (value === 'Income') {
+                  setIsDebtPayment(false);
+                  setDebtId('');
+                  setCategory('');
+                  return;
+                }
+
+                if (isDebtPayment) {
+                  setCategory('Debt Payment');
+                  return;
+                }
+
                 setCategory('');
               }}
+              disabled={isDebtPayment && value === 'Income'}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
                 type === value
                   ? value === 'Expense'
                     ? 'bg-red-500 text-white'
                     : 'bg-green-500 text-white'
-                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-gray-700'
               }`}
             >
               {value}
@@ -136,19 +167,25 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
           ))}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
-          >
-            <option value="">Select category…</option>
-            {availableCategories.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
-        </div>
+        {!isDebtPayment ? (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
+            >
+              <option value="">Select category…</option>
+              {availableCategories.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+            This recurring rule will be logged as a debt payment.
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ($)</label>
@@ -173,6 +210,52 @@ export default function RecurringRuleModal({ open, onClose, onSaved, template })
             placeholder="e.g. First paycheck"
           />
         </div>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isDebtPayment}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setIsDebtPayment(checked);
+              setError('');
+
+              if (checked) {
+                setType('Expense');
+                setCategory('Debt Payment');
+                return;
+              }
+
+              setDebtId('');
+              setCategory('');
+            }}
+            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Apply this recurring rule to a debt</span>
+        </label>
+
+        {isDebtPayment && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Which Debt?</label>
+            <select
+              value={debtId}
+              onChange={(e) => setDebtId(e.target.value)}
+              className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
+            >
+              <option value="">Select a debt…</option>
+              {debts.map((debt) => (
+                <option key={debt.id} value={debt.id}>
+                  {formatDebtLabel(debt)} — ${debt.current_balance.toFixed(2)} remaining{debt.archived_at ? ' (archived)' : ''}
+                </option>
+              ))}
+            </select>
+            {selectedDebt && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Rule will apply payments to {formatDebtLabel(selectedDebt)}.
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>

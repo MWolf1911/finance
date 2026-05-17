@@ -1,8 +1,29 @@
 const express = require('express');
 const RecurringTemplateModel = require('../models/recurringTemplate');
+const DebtModel = require('../models/debt');
 const { runLazyGeneration } = require('../services/lazyGeneration');
 
 const router = express.Router();
+
+function validateDebtPaymentTemplate(type, category, debtId) {
+  if (category === 'Debt Payment' && type !== 'Expense') {
+    return 'Debt payment rules must be logged as expenses';
+  }
+
+  if (category === 'Debt Payment' && !debtId) {
+    return 'debtId is required for debt payment rules';
+  }
+
+  if (category !== 'Debt Payment' && debtId) {
+    return 'debtId can only be used with Debt Payment rules';
+  }
+
+  if (debtId && !DebtModel.getById(debtId)) {
+    return 'Selected debt was not found';
+  }
+
+  return null;
+}
 
 // GET /api/templates
 router.get('/', (req, res) => {
@@ -21,10 +42,14 @@ router.get('/:id', (req, res) => {
 
 // POST /api/templates
 router.post('/', (req, res) => {
-  const { type, recurrence = 'monthly', dayOfMonth, startDate, endDate, category, amount, description } = req.body;
+  const { type, recurrence = 'monthly', dayOfMonth, startDate, endDate, category, amount, description, debtId } = req.body;
 
   if (!category || !amount) {
     return res.status(400).json({ error: 'category and amount are required' });
+  }
+
+  if (!['Income', 'Expense'].includes(type)) {
+    return res.status(400).json({ error: 'type must be Income or Expense' });
   }
 
   const validRecurrences = ['weekly', 'biweekly', 'monthly'];
@@ -50,8 +75,23 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'End date must be on or after start date' });
   }
 
+  const debtTemplateError = validateDebtPaymentTemplate(type, category, debtId);
+  if (debtTemplateError) {
+    return res.status(400).json({ error: debtTemplateError });
+  }
+
   try {
-    const template = RecurringTemplateModel.create({ type, recurrence, dayOfMonth, startDate, endDate, category, amount, description });
+    const template = RecurringTemplateModel.create({
+      type,
+      recurrence,
+      dayOfMonth,
+      startDate,
+      endDate,
+      category,
+      amount,
+      description,
+      debtId: debtId || null,
+    });
     // Immediately generate any pending transactions for the new template
     runLazyGeneration({ force: true });
     res.status(201).json(template);
@@ -62,7 +102,7 @@ router.post('/', (req, res) => {
 
 // PUT /api/templates/:id
 router.put('/:id', (req, res) => {
-  const { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description } = req.body || {};
+  const { type, recurrence, dayOfMonth, startDate, endDate, category, amount, description, debtId } = req.body || {};
 
   const existing = RecurringTemplateModel.getById(req.params.id);
   if (!existing) {
@@ -73,12 +113,16 @@ router.put('/:id', (req, res) => {
   const hasStartDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'startDate');
   const hasEndDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'endDate');
   const hasDescription = Object.prototype.hasOwnProperty.call(req.body || {}, 'description');
+  const hasDebtId = Object.prototype.hasOwnProperty.call(req.body || {}, 'debtId');
 
+  const nextType = type ?? existing.type;
+  const nextCategory = category ?? existing.category;
   const nextRecurrence = recurrence ?? existing.recurrence;
   const nextDayOfMonth = hasDayOfMonth ? dayOfMonth : existing.day_of_month;
   const nextStartDate = hasStartDate ? startDate : existing.start_date;
   const nextEndDate = hasEndDate ? endDate : existing.end_date;
   const nextAmount = amount ?? existing.amount;
+  const nextDebtId = hasDebtId ? (debtId || null) : existing.debt_id;
 
   const validRecurrences = ['weekly', 'biweekly', 'monthly'];
   if (!validRecurrences.includes(nextRecurrence)) {
@@ -101,6 +145,11 @@ router.put('/:id', (req, res) => {
     return res.status(400).json({ error: 'End date must be on or after start date' });
   }
 
+  const debtTemplateError = validateDebtPaymentTemplate(nextType, nextCategory, nextDebtId);
+  if (debtTemplateError) {
+    return res.status(400).json({ error: debtTemplateError });
+  }
+
   const updated = RecurringTemplateModel.update(req.params.id, {
     type,
     recurrence,
@@ -110,6 +159,7 @@ router.put('/:id', (req, res) => {
     category,
     amount,
     description: hasDescription ? (description || null) : existing.description,
+    debtId: nextDebtId,
   });
 
   if (!updated) {
