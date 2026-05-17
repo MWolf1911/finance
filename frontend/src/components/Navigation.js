@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/transactions', label: 'Transactions', icon: '💳' },
   { href: '/debts', label: 'Debts', icon: '🏦' },
   { href: '/archive', label: 'Archive', icon: '📁' },
+  { href: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function Navigation() {

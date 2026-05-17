@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
-import { useDebts } from '@/lib/hooks';
+import { useCategories, useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { CATEGORIES, formatDebtLabel, todayISO } from '@/lib/constants';
+import { DEFAULT_CATEGORIES, formatDebtLabel, todayISO } from '@/lib/constants';
 
 function getInitialFormState(editData) {
   const isDebtPayment = editData?.category === 'Debt Payment' || Boolean(editData?.debt_id);
@@ -27,6 +27,7 @@ function getInitialFormState(editData) {
 
 export default function TransactionModal({ open, onClose, onSaved, editData }) {
   const { debts } = useDebts();
+  const { categories } = useCategories();
   const isEdit = !!editData;
   const initialState = getInitialFormState(editData);
 
@@ -68,6 +69,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
   }, [open, editData]);
 
   const selectedDebt = isDebtPayment ? debts.find(d => d.id === debtId) : null;
+  const availableCategories = categories[type]?.length ? categories[type] : DEFAULT_CATEGORIES[type];
   const normalizedType = isDebtPayment ? 'Expense' : type;
   const normalizedCategory = isDebtPayment ? 'Debt Payment' : category;
 
@@ -204,7 +206,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
               className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200"
             >
               <option value="">Select category…</option>
-              {CATEGORIES[type].map((c) => (
+              {availableCategories.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

@@ -72,6 +72,13 @@ export const api = {
   unarchiveDebt: (id) => apiFetch(`/debts/${id}/unarchive`, { method: 'POST' }),
   deleteDebt: (id) => apiFetch(`/debts/${id}`, { method: 'DELETE' }),
 
+  // Settings
+  getCategories: () => apiFetch('/settings/categories'),
+  updateCategories: (data) => apiFetch('/settings/categories', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
   // Archives
   getArchives: () => apiFetch('/archives'),
   getArchiveMonth: (year, month) => apiFetch(`/archives/${year}/${month}`),

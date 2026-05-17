@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useTransactions, useMonthlySummary, useTemplates } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, getCurrentMonth, getMonthName, CATEGORIES } from '@/lib/constants';
+import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib/constants';
 import TransactionModal from '@/components/TransactionModal';
 
 export default function TransactionsPage() {

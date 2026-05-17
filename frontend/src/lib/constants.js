@@ -1,4 +1,4 @@
-export const CATEGORIES = {
+export const DEFAULT_CATEGORIES = {
   Expense: [
     'Rent/Mortgage', 'Utilities', 'Internet', 'Phone', 'Insurance',
     'Groceries', 'Dining Out', 'Transportation', 'Gas', 'Car Payment',

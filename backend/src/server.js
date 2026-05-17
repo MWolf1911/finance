@@ -10,6 +10,7 @@ const transactionsRouter = require('./routes/transactions');
 const templatesRouter = require('./routes/templates');
 const debtsRouter = require('./routes/debts');
 const archivesRouter = require('./routes/archives');
+const settingsRouter = require('./routes/settings');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,6 +54,7 @@ app.use('/api/transactions', transactionsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/debts', debtsRouter);
 app.use('/api/archives', archivesRouter);
+app.use('/api/settings', settingsRouter);
 
 // Health check + trigger lazy generation/archive on app load.
 app.get('/api/health', (req, res) => {

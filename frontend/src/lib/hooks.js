@@ -81,6 +81,22 @@ export function useDebtProjection(extraPayment) {
   return { projection: data, error, isLoading, mutate };
 }
 
+export function useCategories() {
+  const { currentUser } = useAuth();
+  const key = currentUser ? ['categories'] : null;
+
+  const { data, error, isLoading, mutate } = useSWR(key, () =>
+    api.getCategories()
+  );
+
+  return {
+    categories: data || { Expense: [], Income: [] },
+    error,
+    isLoading,
+    mutate,
+  };
+}
+
 // ── Archives ───────────────────────────────────────────────
 export function useArchives() {
   const { currentUser } = useAuth();
