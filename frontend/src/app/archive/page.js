@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useArchives, useArchiveMonth } from '@/lib/hooks';
 import { api } from '@/lib/api';
@@ -10,6 +10,257 @@ const MONTH_NAMES = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildPrintableArchiveHtml({ archive, month, year }) {
+  const rows = (archive.transactions || []).map((tx) => {
+    const amount = `${tx.type === 'Income' ? '+' : '-'}${formatCurrency(tx.amount)}`;
+
+    return `
+      <tr>
+        <td>
+          <div class="category">${escapeHtml(tx.category)}</div>
+          ${tx.description ? `<div class="description">${escapeHtml(tx.description)}</div>` : ''}
+        </td>
+        <td>${escapeHtml(tx.type)}</td>
+        <td>${escapeHtml(formatDate(tx.date))}</td>
+        <td class="amount ${tx.type === 'Income' ? 'income' : 'expense'}">${escapeHtml(amount)}</td>
+        <td>${tx.is_recurring ? 'Yes' : ''}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <html>
+      <head>
+        <title>${escapeHtml(`${MONTH_NAMES[month]} ${year} - Transactions`)}</title>
+        <style>
+          :root {
+            color-scheme: light;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            padding: 24px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            color: #111827;
+            background: #ffffff;
+            line-height: 1.4;
+          }
+
+          .page {
+            max-width: 960px;
+            margin: 0 auto;
+          }
+
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 16px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #d1d5db;
+            margin-bottom: 20px;
+          }
+
+          .title {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+          }
+
+          .subtitle {
+            margin: 4px 0 0;
+            color: #4b5563;
+            font-size: 14px;
+          }
+
+          .generated {
+            text-align: right;
+            color: #6b7280;
+            font-size: 12px;
+            white-space: nowrap;
+          }
+
+          .summary {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+          }
+
+          .summary-card {
+            border: 1px solid #d1d5db;
+            padding: 12px 14px;
+            background: #f9fafb;
+          }
+
+          .summary-label {
+            margin: 0 0 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6b7280;
+          }
+
+          .summary-value {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+          }
+
+          .income {
+            color: #166534;
+          }
+
+          .expense {
+            color: #b91c1c;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+
+          thead {
+            display: table-header-group;
+          }
+
+          th {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #4b5563;
+            background: #f3f4f6;
+            border-top: 1px solid #d1d5db;
+            border-bottom: 1px solid #d1d5db;
+          }
+
+          td {
+            padding: 10px 12px;
+            vertical-align: top;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 13px;
+            word-break: break-word;
+          }
+
+          .category {
+            font-weight: 600;
+          }
+
+          .description {
+            margin-top: 3px;
+            color: #6b7280;
+            font-size: 12px;
+          }
+
+          .amount {
+            text-align: right;
+            font-family: 'Consolas', 'SFMono-Regular', monospace;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+
+          .empty {
+            padding: 24px 0;
+            text-align: center;
+            color: #6b7280;
+            border-top: 1px solid #d1d5db;
+          }
+
+          @page {
+            size: auto;
+            margin: 0.5in;
+          }
+
+          @media print {
+            body {
+              padding: 0;
+            }
+
+            .page {
+              max-width: none;
+            }
+
+            tr,
+            td,
+            th,
+            .summary-card {
+              break-inside: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="header">
+            <div>
+              <h1 class="title">${escapeHtml(`${MONTH_NAMES[month]} ${year}`)}</h1>
+              <p class="subtitle">Archived monthly transaction history</p>
+            </div>
+            <div class="generated">
+              <div>${escapeHtml(`${archive.transaction_count} transaction${archive.transaction_count === 1 ? '' : 's'}`)}</div>
+              <div>Printed ${escapeHtml(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</div>
+            </div>
+          </div>
+
+          <section class="summary">
+            <div class="summary-card">
+              <p class="summary-label">Income</p>
+              <p class="summary-value income">+${escapeHtml(formatCurrency(archive.income))}</p>
+            </div>
+            <div class="summary-card">
+              <p class="summary-label">Expenses</p>
+              <p class="summary-value expense">-${escapeHtml(formatCurrency(archive.expenses))}</p>
+            </div>
+            <div class="summary-card">
+              <p class="summary-label">Net</p>
+              <p class="summary-value ${archive.net >= 0 ? 'income' : 'expense'}">${escapeHtml(formatCurrency(archive.net))}</p>
+            </div>
+            <div class="summary-card">
+              <p class="summary-label">Transactions</p>
+              <p class="summary-value">${escapeHtml(archive.transaction_count)}</p>
+            </div>
+          </section>
+
+          ${archive.transactions && archive.transactions.length > 0 ? `
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 42%;">Category / Description</th>
+                  <th style="width: 14%;">Type</th>
+                  <th style="width: 16%;">Date</th>
+                  <th style="width: 16%; text-align: right;">Amount</th>
+                  <th style="width: 12%;">Recurring</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          ` : '<div class="empty">No transactions this month.</div>'}
+        </div>
+      </body>
+    </html>
+  `;
+}
 
 export default function ArchivePage() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -179,7 +430,6 @@ function MonthSummaryRow({ archive, selected, onSelect }) {
 
 function MonthDetail({ year, month, onClose }) {
   const { archive, isLoading } = useArchiveMonth(year, month);
-  const printRef = useRef(null);
 
   function handleDownload() {
     const url = api.getArchiveCsvUrl(year, month);
@@ -187,36 +437,12 @@ function MonthDetail({ year, month, onClose }) {
   }
 
   function handlePrint() {
-    const content = printRef.current;
-    if (!content) return;
+    if (!archive) return;
 
     const win = window.open('', '_blank');
-    win.document.write(`
-      <html>
-        <head>
-          <title>${MONTH_NAMES[month]} ${year} - Transactions</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; color: #1f2937; }
-            h1 { font-size: 22px; margin-bottom: 4px; }
-            .subtitle { color: #6b7280; margin-bottom: 20px; }
-            .summary { display: flex; gap: 32px; margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 8px; }
-            .summary div { text-align: center; }
-            .summary .label { font-size: 12px; color: #6b7280; }
-            .summary .value { font-size: 18px; font-weight: 600; }
-            .green { color: #16a34a; }
-            .red { color: #dc2626; }
-            table { width: 100%; border-collapse: collapse; font-size: 14px; }
-            th { text-align: left; padding: 8px 12px; background: #f3f4f6; border-bottom: 2px solid #e5e7eb; font-size: 12px; text-transform: uppercase; color: #6b7280; }
-            td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
-            .amount { text-align: right; font-family: monospace; font-weight: 500; }
-            @media print { .summary { background: #f9fafb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-          </style>
-        </head>
-        <body>
-          ${content.innerHTML}
-        </body>
-      </html>
-    `);
+    if (!win) return;
+
+    win.document.write(buildPrintableArchiveHtml({ archive, month, year }));
     win.document.close();
     win.print();
   }
@@ -258,13 +484,7 @@ function MonthDetail({ year, month, onClose }) {
       ) : !archive ? (
         <div className="text-center py-12 text-gray-400">Archive not found.</div>
       ) : (
-        <div ref={printRef}>
-          {/* Print-only header (hidden on screen) */}
-          <div className="hidden">
-            <h1>{MONTH_NAMES[month]} {year} — Transactions</h1>
-            <p className="subtitle">{archive.transaction_count} transactions</p>
-          </div>
-
+        <div>
           {/* Summary bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-6 py-4 border-b dark:border-gray-700">
             <SummaryCell label="Income" value={archive.income} className="text-green-600" prefix="+" />
