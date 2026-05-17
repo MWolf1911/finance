@@ -5,7 +5,12 @@ import { useAuth } from '@/lib/auth';
 import { useTransactions, useMonthlySummary, useTemplates, useCategories, useAppSettings } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib/constants';
+import { useAutoRefresh } from '@/lib/useAutoRefresh';
+import { usePersistentState } from '@/lib/usePersistentState';
 import TransactionModal from '@/components/TransactionModal';
+
+const DEFAULT_SORT = { key: 'date', dir: 'desc' };
+const SORT_KEYS = new Set(['category', 'type', 'date', 'amount']);
 
 export default function TransactionsPage() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -21,8 +26,10 @@ export default function TransactionsPage() {
   const [filterType, setFilterType] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState('date');
-  const [sortDir, setSortDir] = useState('desc');
+  const [savedSort, setSavedSort] = usePersistentState('finance.transactions.sort', DEFAULT_SORT);
+
+  const sortKey = SORT_KEYS.has(savedSort?.key) ? savedSort.key : DEFAULT_SORT.key;
+  const sortDir = savedSort?.dir === 'asc' ? 'asc' : DEFAULT_SORT.dir;
 
   const filtered = useMemo(() => {
     const list = transactions.filter((tx) => {
@@ -59,6 +66,8 @@ export default function TransactionsPage() {
     () => [...(categories.Income || [])].sort((a, b) => a.localeCompare(b)),
     [categories]
   );
+
+  useAutoRefresh([mutate, mutateTemplates]);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
@@ -163,10 +172,34 @@ export default function TransactionsPage() {
           <>
             {/* Desktop table header */}
             <div className="hidden md:grid grid-cols-[1fr_120px_100px_110px_130px_80px] gap-4 px-6 py-3 bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <SortHeader label="Category" field="category" sortKey={sortKey} sortDir={sortDir} setSortKey={setSortKey} setSortDir={setSortDir} />
-              <SortHeader label="Type" field="type" sortKey={sortKey} sortDir={sortDir} setSortKey={setSortKey} setSortDir={setSortDir} />
-              <SortHeader label="Date" field="date" sortKey={sortKey} sortDir={sortDir} setSortKey={setSortKey} setSortDir={setSortDir} />
-              <SortHeader label="Amount" field="amount" sortKey={sortKey} sortDir={sortDir} setSortKey={setSortKey} setSortDir={setSortDir} className="justify-end" />
+              <SortHeader label="Category" field="category" sortKey={sortKey} sortDir={sortDir} onSort={(field) => {
+                if (sortKey === field) {
+                  setSavedSort({ key: field, dir: sortDir === 'asc' ? 'desc' : 'asc' });
+                } else {
+                  setSavedSort({ key: field, dir: 'asc' });
+                }
+              }} />
+              <SortHeader label="Type" field="type" sortKey={sortKey} sortDir={sortDir} onSort={(field) => {
+                if (sortKey === field) {
+                  setSavedSort({ key: field, dir: sortDir === 'asc' ? 'desc' : 'asc' });
+                } else {
+                  setSavedSort({ key: field, dir: 'asc' });
+                }
+              }} />
+              <SortHeader label="Date" field="date" sortKey={sortKey} sortDir={sortDir} onSort={(field) => {
+                if (sortKey === field) {
+                  setSavedSort({ key: field, dir: sortDir === 'asc' ? 'desc' : 'asc' });
+                } else {
+                  setSavedSort({ key: field, dir: 'asc' });
+                }
+              }} />
+              <SortHeader label="Amount" field="amount" sortKey={sortKey} sortDir={sortDir} onSort={(field) => {
+                if (sortKey === field) {
+                  setSavedSort({ key: field, dir: sortDir === 'asc' ? 'desc' : 'asc' });
+                } else {
+                  setSavedSort({ key: field, dir: 'asc' });
+                }
+              }} className="justify-end" />
               <span>Recurring</span>
               <span className="text-right">Actions</span>
             </div>
@@ -310,15 +343,10 @@ function formatRecurringSchedule(tpl) {
   return label;
 }
 
-function SortHeader({ label, field, sortKey, sortDir, setSortKey, setSortDir, className = '' }) {
+function SortHeader({ label, field, sortKey, sortDir, onSort, className = '' }) {
   const active = sortKey === field;
   function handleClick() {
-    if (active) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(field);
-      setSortDir('asc');
-    }
+    onSort(field);
   }
   return (
     <button

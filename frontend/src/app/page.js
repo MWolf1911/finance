@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { useDashboardBalance, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, getCurrentMonth, getMonthName, formatDate } from '@/lib/constants';
+import { useAutoRefresh } from '@/lib/useAutoRefresh';
 import TransactionModal from '@/components/TransactionModal';
 
 export default function DashboardPage() {
@@ -17,6 +18,8 @@ export default function DashboardPage() {
   const [startingBalanceInput, setStartingBalanceInput] = useState('0');
   const [balanceError, setBalanceError] = useState('');
   const [isSavingBalance, setIsSavingBalance] = useState(false);
+
+  useAutoRefresh([mutateSummary, mutateTransactions, mutateBalance]);
 
   useEffect(() => {
     setStartingBalanceInput(String(balance.startingBalance ?? 0));

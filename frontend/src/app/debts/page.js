@@ -5,7 +5,12 @@ import { useAuth } from '@/lib/auth';
 import { useDebts, useDebtTotal, useMonthlySummary, useTransactions } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDebtLabel, getCurrentMonth, todayISO } from '@/lib/constants';
+import { useAutoRefresh } from '@/lib/useAutoRefresh';
+import { usePersistentState } from '@/lib/usePersistentState';
 import Modal from '@/components/Modal';
+
+const DEFAULT_SORT = { key: 'name', dir: 'asc' };
+const SORT_KEYS = new Set(['name', 'balance', 'rate', 'payment']);
 
 export default function DebtsPage() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -17,13 +22,17 @@ export default function DebtsPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editDebt, setEditDebt] = useState(null);
-  const [sortKey, setSortKey] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [savedSort, setSavedSort] = usePersistentState('finance.debts.sort', DEFAULT_SORT);
+
+  const sortKey = SORT_KEYS.has(savedSort?.key) ? savedSort.key : DEFAULT_SORT.key;
+  const sortDir = savedSort?.dir === 'desc' ? 'desc' : DEFAULT_SORT.dir;
 
   const activeDebts = useMemo(
     () => debts.filter((d) => !d.archived_at),
     [debts]
   );
+
+  useAutoRefresh([mutate, mutateTotal]);
 
   const archivedDebts = useMemo(
     () => debts.filter((d) => Boolean(d.archived_at)),
@@ -107,8 +116,11 @@ export default function DebtsPage() {
               <button
                 key={key}
                 onClick={() => {
-                  if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-                  else { setSortKey(key); setSortDir('asc'); }
+                  if (sortKey === key) {
+                    setSavedSort({ key, dir: sortDir === 'asc' ? 'desc' : 'asc' });
+                  } else {
+                    setSavedSort({ key, dir: 'asc' });
+                  }
                 }}
                 className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors ${
                   sortKey === key
