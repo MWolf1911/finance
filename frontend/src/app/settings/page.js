@@ -23,7 +23,51 @@ const DEFAULT_APP_SETTINGS = {
   liveRefresh: {
     intervalSeconds: 10,
   },
+  budgetTargets: {
+    Expense: {},
+    Income: {},
+  },
 };
+
+function copyBudgetTargets(targets = DEFAULT_APP_SETTINGS.budgetTargets) {
+  return {
+    Expense: { ...((targets && targets.Expense) || {}) },
+    Income: { ...((targets && targets.Income) || {}) },
+  };
+}
+
+function normalizeBudgetTargets(targets = DEFAULT_APP_SETTINGS.budgetTargets) {
+  const normalized = {
+    Expense: {},
+    Income: {},
+  };
+
+  for (const type of ['Expense', 'Income']) {
+    for (const [rawCategory, rawValue] of Object.entries((targets && targets[type]) || {})) {
+      const category = String(rawCategory || '').trim();
+      const parsed = parseFloat(rawValue);
+      if (!category || !Number.isFinite(parsed) || parsed <= 0) {
+        continue;
+      }
+
+      normalized[type][category] = Number(parsed.toFixed(2));
+    }
+  }
+
+  return normalized;
+}
+
+function toBudgetInputDrafts(targets = DEFAULT_APP_SETTINGS.budgetTargets) {
+  const normalized = normalizeBudgetTargets(targets);
+  return {
+    Expense: Object.fromEntries(
+      Object.entries(normalized.Expense).map(([category, value]) => [category, String(value)])
+    ),
+    Income: Object.fromEntries(
+      Object.entries(normalized.Income).map(([category, value]) => [category, String(value)])
+    ),
+  };
+}
 
 export default function SettingsPage() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -32,6 +76,7 @@ export default function SettingsPage() {
 
   const [categoryDraft, setCategoryDraft] = useState(DEFAULT_CATEGORIES);
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_APP_SETTINGS);
+  const [budgetDrafts, setBudgetDrafts] = useState(toBudgetInputDrafts());
   const [newExpense, setNewExpense] = useState('');
   const [newIncome, setNewIncome] = useState('');
   const [editing, setEditing] = useState({ type: null, index: -1, value: '' });
@@ -50,6 +95,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!settingsLoading) {
+      const normalizedBudgetTargets = normalizeBudgetTargets(settings.budgetTargets);
       setSettingsDraft({
         transactionDefaults: {
           defaultType: settings.transactionDefaults?.defaultType || 'Expense',
@@ -69,7 +115,9 @@ export default function SettingsPage() {
             ? settings.liveRefresh.intervalSeconds
             : 10,
         },
+        budgetTargets: normalizedBudgetTargets,
       });
+      setBudgetDrafts(toBudgetInputDrafts(normalizedBudgetTargets));
     }
   }, [settings, settingsLoading]);
 
@@ -120,9 +168,72 @@ export default function SettingsPage() {
         ...settingsDraft.liveRefresh,
         ...(nextPartial.liveRefresh || {}),
       },
+      budgetTargets: normalizeBudgetTargets({
+        ...copyBudgetTargets(settingsDraft.budgetTargets),
+        ...(nextPartial.budgetTargets || {}),
+        Expense: {
+          ...(settingsDraft.budgetTargets?.Expense || {}),
+          ...((nextPartial.budgetTargets && nextPartial.budgetTargets.Expense) || {}),
+        },
+        Income: {
+          ...(settingsDraft.budgetTargets?.Income || {}),
+          ...((nextPartial.budgetTargets && nextPartial.budgetTargets.Income) || {}),
+        },
+      }),
     };
     setSettingsDraft(next);
     persistSettings(next);
+  }
+
+  function updateBudgetDraft(type, category, value) {
+    setBudgetDrafts((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [category]: value,
+      },
+    }));
+  }
+
+  function saveBudgetTarget(type, category) {
+    const rawValue = budgetDrafts[type]?.[category] ?? '';
+    const parsed = parseFloat(rawValue);
+    const normalizedValue = Number.isFinite(parsed) && parsed > 0
+      ? Number(parsed.toFixed(2))
+      : null;
+
+    if ((settingsDraft.budgetTargets?.[type]?.[category] ?? null) === normalizedValue) {
+      setBudgetDrafts((current) => ({
+        ...current,
+        [type]: {
+          ...current[type],
+          [category]: normalizedValue === null ? '' : String(normalizedValue),
+        },
+      }));
+      return;
+    }
+
+    const nextBudgetTargets = copyBudgetTargets(settingsDraft.budgetTargets);
+    if (normalizedValue === null) {
+      delete nextBudgetTargets[type][category];
+    } else {
+      nextBudgetTargets[type][category] = normalizedValue;
+    }
+
+    const nextSettings = {
+      ...settingsDraft,
+      budgetTargets: normalizeBudgetTargets(nextBudgetTargets),
+    };
+
+    setSettingsDraft(nextSettings);
+    setBudgetDrafts((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [category]: normalizedValue === null ? '' : String(normalizedValue),
+      },
+    }));
+    persistSettings(nextSettings);
   }
 
   function addCategory(type) {
@@ -147,9 +258,28 @@ export default function SettingsPage() {
 
   function deleteCategory(type, index) {
     const list = categoryDraft[type] || [];
+    const removedCategory = list[index];
     const nextDraft = { ...categoryDraft, [type]: list.filter((_, i) => i !== index) };
+    const nextBudgetTargets = copyBudgetTargets(settingsDraft.budgetTargets);
+    const nextBudgetDrafts = {
+      ...budgetDrafts,
+      [type]: { ...budgetDrafts[type] },
+    };
+
+    delete nextBudgetTargets[type][removedCategory];
+    delete nextBudgetDrafts[type][removedCategory];
+
     setCategoryDraft(nextDraft);
+    setSettingsDraft({
+      ...settingsDraft,
+      budgetTargets: normalizeBudgetTargets(nextBudgetTargets),
+    });
+    setBudgetDrafts(nextBudgetDrafts);
     persistCategories(nextDraft);
+    persistSettings({
+      ...settingsDraft,
+      budgetTargets: normalizeBudgetTargets(nextBudgetTargets),
+    });
   }
 
   function startEdit(type, index) {
@@ -178,19 +308,52 @@ export default function SettingsPage() {
       return;
     }
 
+    const previousName = list[editing.index];
     const nextList = [...list];
     nextList[editing.index] = value;
     const nextDraft = { ...categoryDraft, [editing.type]: nextList };
+    const nextBudgetTargets = copyBudgetTargets(settingsDraft.budgetTargets);
+    const nextBudgetDrafts = {
+      ...budgetDrafts,
+      [editing.type]: { ...budgetDrafts[editing.type] },
+    };
+
+    if (previousName !== value) {
+      const existingTarget = nextBudgetTargets[editing.type][previousName];
+      const existingDraft = nextBudgetDrafts[editing.type][previousName];
+
+      delete nextBudgetTargets[editing.type][previousName];
+      delete nextBudgetDrafts[editing.type][previousName];
+
+      if (existingTarget !== undefined) {
+        nextBudgetTargets[editing.type][value] = existingTarget;
+      }
+
+      if (existingDraft !== undefined) {
+        nextBudgetDrafts[editing.type][value] = existingDraft;
+      }
+    }
+
+    const nextSettings = {
+      ...settingsDraft,
+      budgetTargets: normalizeBudgetTargets(nextBudgetTargets),
+    };
+
     setCategoryDraft(nextDraft);
+    setSettingsDraft(nextSettings);
+    setBudgetDrafts(nextBudgetDrafts);
     cancelEdit();
     persistCategories(nextDraft);
+    if (previousName !== value) {
+      persistSettings(nextSettings);
+    }
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Settings</h2>
-        <p className="text-gray-500 dark:text-gray-400">Configure categories and behavior defaults.</p>
+        <p className="text-gray-500 dark:text-gray-400">Configure categories, monthly budget targets, and behavior defaults.</p>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-5 space-y-5">
@@ -289,32 +452,38 @@ export default function SettingsPage() {
           title="Expense Categories"
           type="Expense"
           categories={categoryDraft.Expense || []}
+          budgetDrafts={budgetDrafts.Expense || {}}
           newValue={newExpense}
           setNewValue={setNewExpense}
           onAdd={() => addCategory('Expense')}
+          onBudgetChange={(category, value) => updateBudgetDraft('Expense', category, value)}
+          onBudgetSave={(category) => saveBudgetTarget('Expense', category)}
           onDelete={(index) => deleteCategory('Expense', index)}
           onStartEdit={(index) => startEdit('Expense', index)}
           editing={editing}
           setEditing={setEditing}
           onSaveEdit={saveEdit}
           onCancelEdit={cancelEdit}
-          saving={savingCategories}
+          saving={savingCategories || savingSettings}
         />
 
         <CategoryCard
           title="Income Categories"
           type="Income"
           categories={categoryDraft.Income || []}
+          budgetDrafts={budgetDrafts.Income || {}}
           newValue={newIncome}
           setNewValue={setNewIncome}
           onAdd={() => addCategory('Income')}
+          onBudgetChange={(category, value) => updateBudgetDraft('Income', category, value)}
+          onBudgetSave={(category) => saveBudgetTarget('Income', category)}
           onDelete={(index) => deleteCategory('Income', index)}
           onStartEdit={(index) => startEdit('Income', index)}
           editing={editing}
           setEditing={setEditing}
           onSaveEdit={saveEdit}
           onCancelEdit={cancelEdit}
-          saving={savingCategories}
+          saving={savingCategories || savingSettings}
         />
       </div>
 
@@ -346,9 +515,12 @@ function CategoryCard({
   title,
   type,
   categories,
+  budgetDrafts,
   newValue,
   setNewValue,
   onAdd,
+  onBudgetChange,
+  onBudgetSave,
   onDelete,
   onStartEdit,
   editing,
@@ -386,64 +558,93 @@ function CategoryCard({
           </button>
         </div>
 
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Leave the monthly target blank to disable it for a category.
+        </p>
+
         <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
           {categories.length === 0 ? (
             <p className="text-sm text-gray-400">No categories configured.</p>
           ) : (
             categories.map((category, index) => {
               const isEditing = editing.type === type && editing.index === index;
+              const budgetValue = budgetDrafts[category] ?? '';
 
               return (
                 <div
                   key={`${type}-${category}-${index}`}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border dark:border-gray-700"
+                  className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_170px_auto] gap-3 px-3 py-3 rounded-lg border dark:border-gray-700"
                 >
-                  {isEditing ? (
-                    <input
-                      value={editing.value}
-                      onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                      className="flex-1 px-2 py-1.5 border dark:border-gray-600 rounded focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 text-sm"
-                      autoFocus
-                    />
-                  ) : (
-                    <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{category}</span>
-                  )}
+                  <div className="min-w-0 flex items-center gap-2">
+                    {isEditing ? (
+                      <input
+                        value={editing.value}
+                        onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                        className="flex-1 px-2 py-1.5 border dark:border-gray-600 rounded focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 text-sm"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">{category}</span>
+                    )}
+                  </div>
 
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={onSaveEdit}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={onCancelEdit}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1.5 rounded border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => onStartEdit(index)}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1.5 rounded border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => onDelete(index)}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1.5 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/40 dark:text-red-300 disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Monthly target</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={budgetValue}
+                      onChange={(e) => onBudgetChange(category, e.target.value)}
+                      onBlur={() => onBudgetSave(category)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          onBudgetSave(category);
+                        }
+                      }}
+                      disabled={saving}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 text-sm disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={onSaveEdit}
+                          disabled={saving}
+                          className="text-xs px-2.5 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={onCancelEdit}
+                          disabled={saving}
+                          className="text-xs px-2.5 py-1.5 rounded border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onStartEdit(index)}
+                          disabled={saving}
+                          className="text-xs px-2.5 py-1.5 rounded border dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => onDelete(index)}
+                          disabled={saving}
+                          className="text-xs px-2.5 py-1.5 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/40 dark:text-red-300 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })

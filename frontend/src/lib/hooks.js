@@ -149,6 +149,10 @@ export function useAppSettings() {
       liveRefresh: {
         intervalSeconds: 10,
       },
+      budgetTargets: {
+        Expense: {},
+        Income: {},
+      },
     },
     error,
     isLoading,

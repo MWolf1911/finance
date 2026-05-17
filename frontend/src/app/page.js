@@ -59,6 +59,37 @@ export default function DashboardPage() {
   const reconciliationVariance = hasReconciledEnding && endingBalance !== null
     ? parsedReconciledEnding - endingBalance
     : balance.variance;
+  const categoryTotals = Object.fromEntries(
+    (summary?.byCategory || []).map((item) => [`${item.type}:${item.category}`, item.total])
+  );
+  const budgetRows = ['Expense', 'Income']
+    .flatMap((type) => Object.entries(settings.budgetTargets?.[type] || {}).map(([category, target]) => {
+      const actual = categoryTotals[`${type}:${category}`] ?? 0;
+      const progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+      const difference = type === 'Expense' ? target - actual : actual - target;
+
+      return {
+        type,
+        category,
+        target,
+        actual,
+        progressPercent,
+        difference,
+        statusLabel: type === 'Expense'
+          ? difference >= 0
+            ? `${formatCurrency(difference)} left`
+            : `${formatCurrency(Math.abs(difference))} over`
+          : difference >= 0
+            ? `${formatCurrency(difference)} above goal`
+            : `${formatCurrency(Math.abs(difference))} to goal`,
+      };
+    }))
+    .sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type.localeCompare(b.type);
+      }
+      return a.category.localeCompare(b.category);
+    });
 
   async function saveStartingBalance() {
     if (!Number.isFinite(parsedStartingBalance)) {
@@ -276,6 +307,72 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Budget Targets</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Monthly progress for saved category targets.</p>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Update targets from Settings.</p>
+        </div>
+
+        {budgetRows.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
+            No budget targets configured yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {budgetRows.map((row) => {
+              const statusClass = row.difference >= 0
+                ? row.type === 'Expense'
+                  ? 'text-blue-600'
+                  : 'text-green-600'
+                : 'text-red-600';
+              const barClass = row.difference >= 0
+                ? row.type === 'Expense'
+                  ? 'bg-blue-500'
+                  : 'bg-green-500'
+                : 'bg-red-500';
+
+              return (
+                <div
+                  key={`${row.type}-${row.category}`}
+                  className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-800 dark:text-gray-100">{row.category}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          row.type === 'Income'
+                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                            : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                        }`}>
+                          {row.type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {row.type === 'Expense' ? 'Spent' : 'Received'} {formatCurrency(row.actual)} of {formatCurrency(row.target)}
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className={`text-sm font-semibold ${statusClass}`}>{row.statusLabel}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Monthly target</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${barClass}`}
+                      style={{ width: `${row.progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Recent transactions */}
       {recentTransactions.length > 0 && (

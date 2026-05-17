@@ -19,9 +19,39 @@ const DEFAULT_SETTINGS = {
   liveRefresh: {
     intervalSeconds: 10,
   },
+  budgetTargets: {
+    Expense: {},
+    Income: {},
+  },
 };
 
 const ALLOWED_REFRESH_INTERVALS = new Set([0, 5, 10, 30, 60]);
+
+function normalizeBudgetTargets(input = {}) {
+  const normalized = {
+    Expense: {},
+    Income: {},
+  };
+
+  for (const type of ['Expense', 'Income']) {
+    const rawGroup = input[type];
+    if (!rawGroup || typeof rawGroup !== 'object' || Array.isArray(rawGroup)) {
+      continue;
+    }
+
+    for (const [rawCategory, rawValue] of Object.entries(rawGroup)) {
+      const category = String(rawCategory || '').trim();
+      const parsed = parseFloat(rawValue);
+      if (!category || !Number.isFinite(parsed) || parsed <= 0) {
+        continue;
+      }
+
+      normalized[type][category] = Number(parsed.toFixed(2));
+    }
+  }
+
+  return normalized;
+}
 
 function normalizeRefreshIntervalSeconds(value) {
   const parsed = parseInt(value, 10);
@@ -36,6 +66,7 @@ function normalizeSettings(input = {}) {
   const debt = input.debt || {};
   const archivePrint = input.archivePrint || {};
   const liveRefresh = input.liveRefresh || {};
+  const budgetTargets = input.budgetTargets || {};
 
   return {
     transactionDefaults: {
@@ -56,6 +87,7 @@ function normalizeSettings(input = {}) {
     liveRefresh: {
       intervalSeconds: normalizeRefreshIntervalSeconds(liveRefresh.intervalSeconds),
     },
+    budgetTargets: normalizeBudgetTargets(budgetTargets),
   };
 }
 
@@ -77,6 +109,16 @@ function mergeWithDefaults(input = {}) {
       ...DEFAULT_SETTINGS.liveRefresh,
       ...(input.liveRefresh || {}),
     },
+    budgetTargets: {
+      Expense: {
+        ...DEFAULT_SETTINGS.budgetTargets.Expense,
+        ...((input.budgetTargets && input.budgetTargets.Expense) || {}),
+      },
+      Income: {
+        ...DEFAULT_SETTINGS.budgetTargets.Income,
+        ...((input.budgetTargets && input.budgetTargets.Income) || {}),
+      },
+    },
   });
 }
 
@@ -96,6 +138,17 @@ function getSettings() {
 
 function setSettings(settings) {
   const current = getSettings();
+  const nextBudgetTargets = settings && settings.budgetTargets
+    ? {
+        Expense: Object.prototype.hasOwnProperty.call(settings.budgetTargets, 'Expense')
+          ? ((settings.budgetTargets && settings.budgetTargets.Expense) || {})
+          : current.budgetTargets.Expense,
+        Income: Object.prototype.hasOwnProperty.call(settings.budgetTargets, 'Income')
+          ? ((settings.budgetTargets && settings.budgetTargets.Income) || {})
+          : current.budgetTargets.Income,
+      }
+    : current.budgetTargets;
+
   const normalized = mergeWithDefaults({
     ...current,
     ...(settings || {}),
@@ -115,6 +168,7 @@ function setSettings(settings) {
       ...current.liveRefresh,
       ...((settings && settings.liveRefresh) || {}),
     },
+    budgetTargets: nextBudgetTargets,
   });
   SystemMetadataModel.set(SETTINGS_KEY, JSON.stringify(normalized));
   return normalized;
