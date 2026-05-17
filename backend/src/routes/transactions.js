@@ -3,6 +3,7 @@ const TransactionModel = require('../models/transaction');
 const RecurringTemplateModel = require('../models/recurringTemplate');
 const DebtModel = require('../models/debt');
 const { runLazyGeneration } = require('../services/lazyGeneration');
+const { getSettings } = require('../lib/settings');
 
 const router = express.Router();
 
@@ -45,7 +46,14 @@ function applyDebtPayment(debtId, amount) {
     return { error: `Payment exceeds remaining balance (${debt.current_balance.toFixed(2)})` };
   }
 
-  DebtModel.update(debtId, { currentBalance: Math.max(0, debt.current_balance - amount) });
+  const nextBalance = Math.max(0, debt.current_balance - amount);
+  DebtModel.update(debtId, { currentBalance: nextBalance });
+
+  const settings = getSettings();
+  if (nextBalance <= 0 && settings.debt.autoArchivePaidOff) {
+    DebtModel.archive(debtId);
+  }
+
   return { debt };
 }
 

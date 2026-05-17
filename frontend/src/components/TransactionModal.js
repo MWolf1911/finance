@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
-import { useCategories, useDebts } from '@/lib/hooks';
+import { useAppSettings, useCategories, useDebts } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { DEFAULT_CATEGORIES, formatDebtLabel, todayISO } from '@/lib/constants';
 
-function getInitialFormState(editData) {
+function getInitialFormState(editData, settings) {
   const isDebtPayment = editData?.category === 'Debt Payment' || Boolean(editData?.debt_id);
+  const defaultType = settings?.transactionDefaults?.defaultType === 'Income' ? 'Income' : 'Expense';
+  const dateBehavior = settings?.transactionDefaults?.defaultDateBehavior === 'lastUsed' ? 'lastUsed' : 'today';
+  const lastUsedDate = typeof window !== 'undefined' ? window.localStorage.getItem('lastTransactionDate') : null;
+  const defaultDate = dateBehavior === 'lastUsed' && lastUsedDate ? lastUsedDate : todayISO();
 
   return {
-    type: isDebtPayment ? 'Expense' : editData?.type || 'Expense',
+    type: isDebtPayment ? 'Expense' : editData?.type || defaultType,
     category: isDebtPayment ? 'Debt Payment' : editData?.category || '',
     amount: editData?.amount?.toString() || '',
-    date: editData?.date || todayISO(),
+    date: editData?.date || defaultDate,
     description: editData?.description || '',
     debtId: editData?.debt_id || '',
     isDebtPayment,
@@ -28,8 +32,9 @@ function getInitialFormState(editData) {
 export default function TransactionModal({ open, onClose, onSaved, editData }) {
   const { debts } = useDebts();
   const { categories } = useCategories();
+  const { settings } = useAppSettings();
   const isEdit = !!editData;
-  const initialState = getInitialFormState(editData);
+  const initialState = getInitialFormState(editData, settings);
 
   const [type, setType] = useState(initialState.type);
   const [category, setCategory] = useState(initialState.category);
@@ -51,7 +56,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
       return;
     }
 
-    const nextState = getInitialFormState(editData);
+    const nextState = getInitialFormState(editData, settings);
     setType(nextState.type);
     setCategory(nextState.category);
     setAmount(nextState.amount);
@@ -66,7 +71,7 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
     setEndDate(nextState.endDate);
     setError('');
     setLoading(false);
-  }, [open, editData]);
+  }, [open, editData, settings]);
 
   const selectedDebt = isDebtPayment ? debts.find(d => d.id === debtId) : null;
   const availableCategories = categories[type]?.length ? categories[type] : DEFAULT_CATEGORIES[type];
@@ -95,6 +100,10 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
     }
     if (!normalizedCategory) {
       setError('Select a category');
+      return;
+    }
+    if (settings.transactionDefaults.requireDescription && !description.trim()) {
+      setError('Description is required by your settings');
       return;
     }
     if (isDebtPayment && !debtId) {
@@ -147,6 +156,9 @@ export default function TransactionModal({ open, onClose, onSaved, editData }) {
           payload.endDate = endDate || null;
         }
         await api.createTransaction(payload);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('lastTransactionDate', date);
+        }
       }
       onSaved?.();
       onClose();

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useArchives, useArchiveMonth } from '@/lib/hooks';
+import { useArchives, useArchiveMonth, useAppSettings } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/constants';
 
@@ -20,7 +20,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function buildPrintableArchiveHtml({ archive, month, year }) {
+function buildPrintableArchiveHtml({ archive, month, year, mode = 'detailed', includeDescriptions = true }) {
   const rows = (archive.transactions || []).map((tx) => {
     const amount = `${tx.type === 'Income' ? '+' : '-'}${formatCurrency(tx.amount)}`;
 
@@ -28,7 +28,7 @@ function buildPrintableArchiveHtml({ archive, month, year }) {
       <tr>
         <td>
           <div class="category">${escapeHtml(tx.category)}</div>
-          ${tx.description ? `<div class="description">${escapeHtml(tx.description)}</div>` : ''}
+          ${includeDescriptions && tx.description ? `<div class="description">${escapeHtml(tx.description)}</div>` : ''}
         </td>
         <td>${escapeHtml(tx.type)}</td>
         <td>${escapeHtml(formatDate(tx.date))}</td>
@@ -154,10 +154,10 @@ function buildPrintableArchiveHtml({ archive, month, year }) {
           }
 
           td {
-            padding: 10px 12px;
+            padding: ${mode === 'compact' ? '7px 10px' : '10px 12px'};
             vertical-align: top;
             border-bottom: 1px solid #e5e7eb;
-            font-size: 13px;
+            font-size: ${mode === 'compact' ? '12px' : '13px'};
             word-break: break-word;
           }
 
@@ -168,7 +168,7 @@ function buildPrintableArchiveHtml({ archive, month, year }) {
           .description {
             margin-top: 3px;
             color: #6b7280;
-            font-size: 12px;
+            font-size: ${mode === 'compact' ? '11px' : '12px'};
           }
 
           .amount {
@@ -430,6 +430,7 @@ function MonthSummaryRow({ archive, selected, onSelect }) {
 
 function MonthDetail({ year, month, onClose }) {
   const { archive, isLoading } = useArchiveMonth(year, month);
+  const { settings } = useAppSettings();
 
   function handleDownload() {
     const url = api.getArchiveCsvUrl(year, month);
@@ -442,7 +443,13 @@ function MonthDetail({ year, month, onClose }) {
     const win = window.open('', '_blank');
     if (!win) return;
 
-    win.document.write(buildPrintableArchiveHtml({ archive, month, year }));
+    win.document.write(buildPrintableArchiveHtml({
+      archive,
+      month,
+      year,
+      mode: settings.archivePrint.mode,
+      includeDescriptions: settings.archivePrint.includeDescriptions,
+    }));
     win.document.close();
     win.print();
   }

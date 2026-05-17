@@ -73,6 +73,11 @@ export const api = {
   deleteDebt: (id) => apiFetch(`/debts/${id}`, { method: 'DELETE' }),
 
   // Settings
+  getSettings: () => apiFetch('/settings'),
+  updateSettings: (data) => apiFetch('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
   getCategories: () => apiFetch('/settings/categories'),
   updateCategories: (data) => apiFetch('/settings/categories', {
     method: 'PUT',

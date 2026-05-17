@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useTransactions, useMonthlySummary, useTemplates, useCategories } from '@/lib/hooks';
+import { useTransactions, useMonthlySummary, useTemplates, useCategories, useAppSettings } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from '@/lib/constants';
 import TransactionModal from '@/components/TransactionModal';
@@ -14,6 +14,7 @@ export default function TransactionsPage() {
   const { mutate: mutateSummary } = useMonthlySummary(month, year);
   const { templates, mutate: mutateTemplates } = useTemplates();
   const { categories } = useCategories();
+  const { settings } = useAppSettings();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -61,13 +62,13 @@ export default function TransactionsPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this transaction?')) return;
+    if (settings.transactionDefaults.confirmBeforeDelete && !confirm('Delete this transaction?')) return;
     await api.deleteTransaction(id);
     handleSaved();
   }
 
   async function handleDeleteTemplate(id) {
-    if (!confirm('Delete this recurring rule? Future transactions will no longer be auto-generated.')) return;
+    if (settings.transactionDefaults.confirmBeforeDelete && !confirm('Delete this recurring rule? Future transactions will no longer be auto-generated.')) return;
     await api.deleteTemplate(id);
     mutateTemplates();
   }

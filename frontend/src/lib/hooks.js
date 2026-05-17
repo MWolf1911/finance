@@ -97,6 +97,36 @@ export function useCategories() {
   };
 }
 
+export function useAppSettings() {
+  const { currentUser } = useAuth();
+  const key = currentUser ? ['appSettings'] : null;
+
+  const { data, error, isLoading, mutate } = useSWR(key, () =>
+    api.getSettings()
+  );
+
+  return {
+    settings: data || {
+      transactionDefaults: {
+        defaultType: 'Expense',
+        defaultDateBehavior: 'today',
+        requireDescription: false,
+        confirmBeforeDelete: true,
+      },
+      debt: {
+        autoArchivePaidOff: true,
+      },
+      archivePrint: {
+        mode: 'detailed',
+        includeDescriptions: true,
+      },
+    },
+    error,
+    isLoading,
+    mutate,
+  };
+}
+
 // ── Archives ───────────────────────────────────────────────
 export function useArchives() {
   const { currentUser } = useAuth();

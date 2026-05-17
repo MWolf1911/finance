@@ -2,43 +2,115 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useCategories } from '@/lib/hooks';
+import { useAppSettings, useCategories } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { DEFAULT_CATEGORIES } from '@/lib/constants';
 
+const DEFAULT_APP_SETTINGS = {
+  transactionDefaults: {
+    defaultType: 'Expense',
+    defaultDateBehavior: 'today',
+    requireDescription: false,
+    confirmBeforeDelete: true,
+  },
+  debt: {
+    autoArchivePaidOff: true,
+  },
+  archivePrint: {
+    mode: 'detailed',
+    includeDescriptions: true,
+  },
+};
+
 export default function SettingsPage() {
   const { currentUser, loading: authLoading } = useAuth();
-  const { categories, isLoading, mutate } = useCategories();
-  const [draft, setDraft] = useState(DEFAULT_CATEGORIES);
+  const { categories, isLoading: categoriesLoading, mutate: mutateCategories } = useCategories();
+  const { settings, isLoading: settingsLoading, mutate: mutateSettings } = useAppSettings();
+
+  const [categoryDraft, setCategoryDraft] = useState(DEFAULT_CATEGORIES);
+  const [settingsDraft, setSettingsDraft] = useState(DEFAULT_APP_SETTINGS);
   const [newExpense, setNewExpense] = useState('');
   const [newIncome, setNewIncome] = useState('');
   const [editing, setEditing] = useState({ type: null, index: -1, value: '' });
-  const [saving, setSaving] = useState(false);
+  const [savingCategories, setSavingCategories] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isLoading) {
-      setDraft({
+    if (!categoriesLoading) {
+      setCategoryDraft({
         Expense: categories.Expense?.length ? categories.Expense : DEFAULT_CATEGORIES.Expense,
         Income: categories.Income?.length ? categories.Income : DEFAULT_CATEGORIES.Income,
       });
     }
-  }, [categories, isLoading]);
+  }, [categories, categoriesLoading]);
+
+  useEffect(() => {
+    if (!settingsLoading) {
+      setSettingsDraft({
+        transactionDefaults: {
+          defaultType: settings.transactionDefaults?.defaultType || 'Expense',
+          defaultDateBehavior: settings.transactionDefaults?.defaultDateBehavior || 'today',
+          requireDescription: Boolean(settings.transactionDefaults?.requireDescription),
+          confirmBeforeDelete: settings.transactionDefaults?.confirmBeforeDelete !== false,
+        },
+        debt: {
+          autoArchivePaidOff: settings.debt?.autoArchivePaidOff !== false,
+        },
+        archivePrint: {
+          mode: settings.archivePrint?.mode === 'compact' ? 'compact' : 'detailed',
+          includeDescriptions: settings.archivePrint?.includeDescriptions !== false,
+        },
+      });
+    }
+  }, [settings, settingsLoading]);
 
   if (authLoading) return <div className="text-center py-20 text-gray-400">Loading…</div>;
   if (!currentUser) return <div className="text-center py-20 text-gray-400">Unable to load household data.</div>;
 
-  async function persist(nextDraft) {
-    setSaving(true);
+  async function persistCategories(nextDraft) {
+    setSavingCategories(true);
     setError('');
     try {
       await api.updateCategories(nextDraft);
-      await mutate();
+      await mutateCategories();
     } catch (err) {
       setError(err.message || 'Failed to save category changes');
     } finally {
-      setSaving(false);
+      setSavingCategories(false);
     }
+  }
+
+  async function persistSettings(nextSettings) {
+    setSavingSettings(true);
+    setError('');
+    try {
+      await api.updateSettings(nextSettings);
+      await mutateSettings();
+    } catch (err) {
+      setError(err.message || 'Failed to save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  function updateSettingsDraft(nextPartial) {
+    const next = {
+      transactionDefaults: {
+        ...settingsDraft.transactionDefaults,
+        ...(nextPartial.transactionDefaults || {}),
+      },
+      debt: {
+        ...settingsDraft.debt,
+        ...(nextPartial.debt || {}),
+      },
+      archivePrint: {
+        ...settingsDraft.archivePrint,
+        ...(nextPartial.archivePrint || {}),
+      },
+    };
+    setSettingsDraft(next);
+    persistSettings(next);
   }
 
   function addCategory(type) {
@@ -48,28 +120,28 @@ export default function SettingsPage() {
       return;
     }
 
-    const list = draft[type] || [];
+    const list = categoryDraft[type] || [];
     if (list.some((item) => item.toLowerCase() === value.toLowerCase())) {
       setError(`${type} category already exists`);
       return;
     }
 
-    const nextDraft = { ...draft, [type]: [...list, value] };
-    setDraft(nextDraft);
+    const nextDraft = { ...categoryDraft, [type]: [...list, value] };
+    setCategoryDraft(nextDraft);
     if (type === 'Expense') setNewExpense('');
     if (type === 'Income') setNewIncome('');
-    persist(nextDraft);
+    persistCategories(nextDraft);
   }
 
   function deleteCategory(type, index) {
-    const list = draft[type] || [];
-    const nextDraft = { ...draft, [type]: list.filter((_, i) => i !== index) };
-    setDraft(nextDraft);
-    persist(nextDraft);
+    const list = categoryDraft[type] || [];
+    const nextDraft = { ...categoryDraft, [type]: list.filter((_, i) => i !== index) };
+    setCategoryDraft(nextDraft);
+    persistCategories(nextDraft);
   }
 
   function startEdit(type, index) {
-    setEditing({ type, index, value: draft[type][index] });
+    setEditing({ type, index, value: categoryDraft[type][index] });
   }
 
   function cancelEdit() {
@@ -87,7 +159,7 @@ export default function SettingsPage() {
       return;
     }
 
-    const list = draft[editing.type] || [];
+    const list = categoryDraft[editing.type] || [];
     const duplicate = list.some((item, idx) => idx !== editing.index && item.toLowerCase() === value.toLowerCase());
     if (duplicate) {
       setError(`${editing.type} category already exists`);
@@ -96,24 +168,96 @@ export default function SettingsPage() {
 
     const nextList = [...list];
     nextList[editing.index] = value;
-    const nextDraft = { ...draft, [editing.type]: nextList };
-    setDraft(nextDraft);
+    const nextDraft = { ...categoryDraft, [editing.type]: nextList };
+    setCategoryDraft(nextDraft);
     cancelEdit();
-    persist(nextDraft);
+    persistCategories(nextDraft);
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Settings</h2>
-        <p className="text-gray-500 dark:text-gray-400">Customize categories used in transaction forms.</p>
+        <p className="text-gray-500 dark:text-gray-400">Configure categories and behavior defaults.</p>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm p-5 space-y-5">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Behavior</h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default transaction type</label>
+            <select
+              value={settingsDraft.transactionDefaults.defaultType}
+              onChange={(e) => updateSettingsDraft({ transactionDefaults: { defaultType: e.target.value } })}
+              disabled={savingSettings}
+              className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 disabled:opacity-50"
+            >
+              <option value="Expense">Expense</option>
+              <option value="Income">Income</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default transaction date</label>
+            <select
+              value={settingsDraft.transactionDefaults.defaultDateBehavior}
+              onChange={(e) => updateSettingsDraft({ transactionDefaults: { defaultDateBehavior: e.target.value } })}
+              disabled={savingSettings}
+              className="w-full px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 disabled:opacity-50"
+            >
+              <option value="today">Today</option>
+              <option value="lastUsed">Last used date</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <ToggleRow
+            label="Require transaction description"
+            checked={settingsDraft.transactionDefaults.requireDescription}
+            disabled={savingSettings}
+            onChange={(checked) => updateSettingsDraft({ transactionDefaults: { requireDescription: checked } })}
+          />
+          <ToggleRow
+            label="Confirm before deleting"
+            checked={settingsDraft.transactionDefaults.confirmBeforeDelete}
+            disabled={savingSettings}
+            onChange={(checked) => updateSettingsDraft({ transactionDefaults: { confirmBeforeDelete: checked } })}
+          />
+          <ToggleRow
+            label="Auto-archive paid-off debts"
+            checked={settingsDraft.debt.autoArchivePaidOff}
+            disabled={savingSettings}
+            onChange={(checked) => updateSettingsDraft({ debt: { autoArchivePaidOff: checked } })}
+          />
+          <ToggleRow
+            label="Include descriptions in archive print"
+            checked={settingsDraft.archivePrint.includeDescriptions}
+            disabled={savingSettings}
+            onChange={(checked) => updateSettingsDraft({ archivePrint: { includeDescriptions: checked } })}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Archive print mode</label>
+          <select
+            value={settingsDraft.archivePrint.mode}
+            onChange={(e) => updateSettingsDraft({ archivePrint: { mode: e.target.value } })}
+            disabled={savingSettings}
+            className="w-full max-w-sm px-3 py-2.5 border dark:border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-200 disabled:opacity-50"
+          >
+            <option value="detailed">Detailed</option>
+            <option value="compact">Compact</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <CategoryCard
           title="Expense Categories"
           type="Expense"
-          categories={draft.Expense || []}
+          categories={categoryDraft.Expense || []}
           newValue={newExpense}
           setNewValue={setNewExpense}
           onAdd={() => addCategory('Expense')}
@@ -123,13 +267,13 @@ export default function SettingsPage() {
           setEditing={setEditing}
           onSaveEdit={saveEdit}
           onCancelEdit={cancelEdit}
-          saving={saving}
+          saving={savingCategories}
         />
 
         <CategoryCard
           title="Income Categories"
           type="Income"
-          categories={draft.Income || []}
+          categories={categoryDraft.Income || []}
           newValue={newIncome}
           setNewValue={setNewIncome}
           onAdd={() => addCategory('Income')}
@@ -139,7 +283,7 @@ export default function SettingsPage() {
           setEditing={setEditing}
           onSaveEdit={saveEdit}
           onCancelEdit={cancelEdit}
-          saving={saving}
+          saving={savingCategories}
         />
       </div>
 
@@ -149,6 +293,21 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ToggleRow({ label, checked, onChange, disabled }) {
+  return (
+    <label className="flex items-center justify-between rounded-lg border dark:border-gray-700 px-3 py-2.5">
+      <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+      />
+    </label>
   );
 }
 
